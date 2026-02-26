@@ -14,6 +14,9 @@ class TaggedText:
     def __init__(self) -> None:
         self.data = []
     
+    def __str__(self):
+        return "\n".join(["[" + segment.tag + "] " + segment.content for segment in self.data])
+    
     @classmethod
     def convert_from_raw_text(cls, text, split_format="line", quote_format="auto"):
         """

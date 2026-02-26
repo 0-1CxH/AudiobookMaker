@@ -1,21 +1,54 @@
 import os
-import requests
+import openai
+import json
+import re
 
-def llm_request_by_curl(**kwargs):
-    api_url = kwargs.get('api_url') or os.environ.get('LLM_API_URL')
+def single_llm_request(**kwargs):
+    """使用OpenAI SDK进行LLM请求"""
     api_key = kwargs.get('api_key') or os.environ.get('LLM_API_KEY')
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "messages": [{"role": "user", "content": kwargs['prompt']}],
-        "model": kwargs['model'],
-        "stream": kwargs.get('stream', False),
-        **kwargs.get('extra_params', {})
-    }
-    response = requests.post(api_url, headers=headers, json=payload, timeout=180)
-    response.raise_for_status()
-    response_data = response.json()
-    return response_data['choices'][0]['message']['content']
+    api_base = kwargs.get('api_url') or os.environ.get('LLM_API_URL')
 
+    client = openai.OpenAI(
+        api_key=api_key,
+        base_url=api_base,
+    )
+
+    response = client.chat.completions.create(
+        model=kwargs['model'],
+        messages=[
+            {"role": "user", "content": kwargs['prompt']}
+        ],
+        n=1
+    )
+
+    return response.choices[0].message.content
+
+def extract_json(s):
+    json_data = None
+    try:
+        # Try to extract JSON content from code block
+        if "```json" in s and "```" in s.split("```json", 1)[1]:
+            json_content = s.split("```json", 1)[1].split("```")[0].strip()
+        elif "<json>" in s and "</json>" in s.split("</json>", 1)[1]:
+            json_content = s.split("</json>", 1)[1].split("</json>")[0].strip()
+        elif "```" in s:
+            # Try to extract from any code block
+            json_content = s.split("```", 2)[1].strip()
+        else:
+            json_content = s.strip()
+        
+        # Safely parse JSON
+        json_data = json.loads(json_content)
+        
+        if not isinstance(json_data, dict):
+            json_data = {"result": json_data}
+    except json.JSONDecodeError:
+        # if can not decode, try extract using regex
+        json_pattern = r'\{[^{}]*\}'
+        matches = re.findall(json_pattern, s)
+        if matches:
+            json_data = json.loads(matches[0])
+        else:
+            # if everything fails, create a dict of str s
+            json_data = {"response": s}
+    return json_data
