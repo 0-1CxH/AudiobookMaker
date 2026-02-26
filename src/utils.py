@@ -7,6 +7,7 @@ def single_llm_request(**kwargs):
     """使用OpenAI SDK进行LLM请求"""
     api_key = kwargs.get('api_key') or os.environ.get('LLM_API_KEY')
     api_base = kwargs.get('api_url') or os.environ.get('LLM_API_URL')
+    model = kwargs.get('model') or os.environ.get('LLM_MODEL')
 
     client = openai.OpenAI(
         api_key=api_key,
@@ -14,7 +15,7 @@ def single_llm_request(**kwargs):
     )
 
     response = client.chat.completions.create(
-        model=kwargs['model'],
+        model=model,
         messages=[
             {"role": "user", "content": kwargs['prompt']}
         ],
