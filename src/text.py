@@ -1,18 +1,20 @@
 import re
 from dataclasses import dataclass
+from .utils import single_llm_request
 
 @dataclass
 class TaggedTextSegment:
     content: str
     tag: str
 
-class TaggedText:
+class TextManager:
     DEFAULT_TAG = "__default__"
     QUOTE_TAG = "__quote__"
     PLACEHOLDER_TAG = "__placeholder__"
 
     def __init__(self) -> None:
         self.data = []
+        self.allocation_map = {}
     
     def __str__(self):
         return "\n".join(["[" + segment.tag + "] " + segment.content for segment in self.data])
@@ -33,7 +35,7 @@ class TaggedText:
                 - "english": 英文引号（"、'）
 
         Returns:
-            TaggedText对象
+            TextManager对象
         """
         obj = cls()
 
@@ -79,7 +81,6 @@ class TaggedText:
         Returns:
             list: 切割后的文本片段，包括内容片段和占位符片段
         """
-        import re
 
         if split_format == "sentence":
             # 按句子切割，同时保留标点符号
@@ -176,6 +177,104 @@ class TaggedText:
                 current_pos = close_pos + 1
 
         return result
-        
+    
+    def iterate_quote_and_context(self, context_window: int = 10):
+        """迭代所有引语及其上下文
 
+        Args:
+            context_window: 上下文窗口大小，每个引语的前后各取多少个非占位符片段
+
+        Yields:
+            tuple: (index, quote_text, context_text)
+            - index: 引语在data中的索引
+            - quote_text: 引语文本
+            - context_text: 上下文文本（包含占位符，但context_window只计算非占位符片段）
+        """
+        for i, tagged_text_segment in enumerate(self.data):
+            if tagged_text_segment.tag == self.QUOTE_TAG:
+                # 获取前文
+                pre_context_indices = []
+                pre_context_count = 0
+                j = i - 1
+
+                while j >= 0 and pre_context_count < context_window:
+                    if self.data[j].tag != self.PLACEHOLDER_TAG:
+                        pre_context_count += 1
+                    pre_context_indices.append(j)
+                    j -= 1
+
+                # 获取后文
+                post_context_indices = []
+                post_context_count = 0
+                j = i + 1
+
+                while j < len(self.data) and post_context_count < context_window:
+                    if self.data[j].tag != self.PLACEHOLDER_TAG:
+                        post_context_count += 1
+                    post_context_indices.append(j)
+                    j += 1
+
+                # 构建上下文文本
+                context_text = ""
+                for idx in reversed(pre_context_indices):
+                    context_text += self.data[idx].content
+
+                context_text += tagged_text_segment.content
+
+                for idx in post_context_indices:
+                    context_text += self.data[idx].content
+
+                yield i, tagged_text_segment.content, context_text
+
+    def allocate_quote_to_character(self, character_names: set, context_window: int):
+        """为所有引语分配说话人
+
+        Args:
+            character_names: 人物名字集合
+            context_window: 上下文窗口大小
+        """
+
+        self.allocation_map = {}
+
+        for segment_index, quote, context_text in self.iterate_quote_and_context(context_window):
+            # 构造LLM提示词，判断谁在说这句引语
+            prompt = f"""请分析以下引语及其上下文，判断这句话最有可能是由哪个角色说出的。
+
+上下文内容（包含该引语）：
+{context_text}
+
+引语内容：
+"{quote}"
+
+可选的人物角色列表：
+{', '.join(sorted(character_names))}
+
+请直接返回一个角色名字。注意：
+（1）如果没有明显匹配的角色，或者上下文中并未指明说话人是谁，请返回unknown，不要强行在可选的里面选一个。
+（2）如果这个引语不是一句人物说的话，而是名词列举或者修辞手法，请返回unknown。
+（3）如果内容不包含引语，请返回unknown。
+"""
+
+            try:
+                
+                response = single_llm_request(prompt=prompt)
+                speaker = response.strip()
+
+                # 只记录有确定角色分配的情况
+                if speaker in character_names:
+                    self.allocation_map[segment_index] = speaker
+                elif speaker != "unknown":
+                    print(f"警告：分配结果 '{speaker}' 不在有效人物列表中")
+                else:
+                    pass
+
+            except Exception as e:
+                print(f"处理索引 {segment_index} 的引语时出错：{e}")
+                continue
+        
+        for segment_index, speaker in self.allocation_map.items():
+            if self.data[segment_index].tag not in [self.DEFAULT_TAG, self.PLACEHOLDER_TAG]:
+                self.data[segment_index].tag = speaker
+
+        
 

@@ -24,13 +24,14 @@ class TestCharacterExtraction:
         """
 
         # 提取人物
-        characters = CharacterManager.extract_characters_from_raw_text(test_text)
+        cm = CharacterManager()
+        cm.extract_characters_from_raw_text(test_text)
 
         # 验证提取结果
-        assert len(characters) > 0
+        assert len(cm.characters) > 0
 
         # 验证每个人物都有名字和描述
-        for char in characters:
+        for char in cm.characters:
             assert isinstance(char, Character)
             assert char.name
             assert isinstance(char.description, str)
@@ -38,7 +39,7 @@ class TestCharacterExtraction:
             assert char.voice_name == ""  # 默认值
 
         # 检查是否包含预期的关键人物
-        character_names = [char.name for char in characters]
+        character_names = [char.name for char in cm.characters]
         # 阿尔文、梅林、马尔福至少应该有一个被提取到
         expected_names = ["阿尔文", "梅林", "马尔福"]
         found_expected = any(name in character_names for name in expected_names)
@@ -191,13 +192,15 @@ class TestCharacterFunctionsIntegration:
         """
 
         # 提取人物
-        characters = CharacterManager.extract_characters_from_raw_text(test_text)
+        cm = CharacterManager()
+        cm.extract_characters_from_raw_text(test_text)
 
         # 验证结果
-        assert isinstance(characters, list)
+        assert isinstance(cm.characters, list)
+        assert len(cm.characters) > 0
         # LLM可能成功提取或失败，我们不强制要求一定提取到人物
-        if characters:
-            for char in characters:
+        if cm.characters:
+            for char in cm.characters:
                 assert isinstance(char, Character)
                 assert char.name
                 assert isinstance(char.description, str)

@@ -16,6 +16,9 @@ class CharacterManager:
         if self.get_character(character.name):
             return
         self.characters.append(character)
+    
+    def remove_character(self, name: str):
+        self.characters = [character for character in self.characters if character.name != name]
 
     def get_character(self, name: str):
         for character in self.characters:
@@ -23,8 +26,7 @@ class CharacterManager:
                 return character
         return None
 
-    @classmethod
-    def extract_characters_from_raw_text(cls, text: str):
+    def extract_characters_from_raw_text(self, text: str):
         """从原始文本中提取人物名字和描述
 
         Args:
@@ -75,12 +77,11 @@ class CharacterManager:
                             voice_name=""
                         )
                         characters.append(character)
-
-            return characters
+            for character in characters:
+                self.add_character(character)
 
         except Exception as e:
             print(f"提取人物失败: {e}")
-            return []
     
     def generate_character_description(self, text: str, character_name: str, suggestion: str = ""):
         """生成指定人物的小传描述
@@ -137,3 +138,12 @@ class CharacterManager:
         except Exception as e:
             print(f"生成人物描述失败: {e}")
             return ""
+    
+    def get_all_character_descriptions(self, name_only: bool = False):
+        if name_only:
+            return {character.name for character in self.characters}
+        else:
+            return {character.name: character.description for character in self.characters}
+        
+        
+        
