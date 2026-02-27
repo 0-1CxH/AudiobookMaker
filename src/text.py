@@ -225,6 +225,15 @@ class TextManager:
                     context_text += self.data[idx].content
 
                 yield i, tagged_text_segment.content, context_text
+    
+    def set_speaker_tag(self, segment_index, speaker_tag):
+        if self.data[segment_index].tag not in [self.DEFAULT_TAG, self.PLACEHOLDER_TAG]:
+            self.data[segment_index].tag = speaker_tag
+    
+    def remove_speaker_tags_by_name(self, name: str):
+        for i, segment in enumerate(self.data):
+            if segment.tag == name:
+                self.data[i].tag = self.QUOTE_TAG
 
     def allocate_quote_to_character(self, character_names: set, context_window: int):
         """为所有引语分配说话人
@@ -273,8 +282,7 @@ class TextManager:
                 continue
         
         for segment_index, speaker in self.allocation_map.items():
-            if self.data[segment_index].tag not in [self.DEFAULT_TAG, self.PLACEHOLDER_TAG]:
-                self.data[segment_index].tag = speaker
+            self.set_speaker_tag(segment_index, speaker)
 
         
 

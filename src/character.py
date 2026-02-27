@@ -139,11 +139,29 @@ class CharacterManager:
             print(f"生成人物描述失败: {e}")
             return ""
     
-    def get_all_character_descriptions(self, name_only: bool = False):
+    def set_character_description(self, character_name: str, description: str):
+        character = self.get_character(character_name)
+        if character:
+            character.description = description
+    
+    def set_character_voice_name(self, character_name: str, voice_name: str):
+        character = self.get_character(character_name)
+        if character:
+            character.voice_name = voice_name
+        
+    def set_character_requires_tts(self, character_name: str, requires_tts: bool):
+        character = self.get_character(character_name)
+        if character:
+            character.requires_tts = requires_tts
+    
+    def get_all_character_descriptions(self, name_only: bool = False, use_voice_name: bool = False):
         if name_only:
-            return {character.name for character in self.characters}
+            return {character.name for character in self.characters if character.name != "默认"}
         else:
-            return {character.name: character.description for character in self.characters}
+            if use_voice_name:
+                return {character.voice_name: character.description for character in self.characters if character.requires_tts}
+            else:
+                return {character.name: character.description for character in self.characters}
         
         
         

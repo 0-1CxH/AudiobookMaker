@@ -893,5 +893,205 @@ class TestAllocateQuoteToCharacter:
                 print(f"索引 {segment_index} 的引语 '{segment_content}' 分配给了 {speaker}")
 
 
+class TestSpeakerTagMethods:
+    """测试set_speaker_tag和remove_speaker_tags_by_name方法"""
+
+    def test_set_speaker_tag_on_quote(self):
+        """测试在引语上设置说话人标签"""
+        text_manager = TextManager()
+        # 添加一些引语
+        text_manager.data.append(
+            TaggedTextSegment(content="引语1", tag=TextManager.QUOTE_TAG)
+        )
+        text_manager.data.append(
+            TaggedTextSegment(content="默认文本", tag=TextManager.DEFAULT_TAG)
+        )
+        text_manager.data.append(
+            TaggedTextSegment(content="引语2", tag=TextManager.QUOTE_TAG)
+        )
+        text_manager.data.append(
+            TaggedTextSegment(content="。", tag=TextManager.PLACEHOLDER_TAG)
+        )
+
+        # 在引语上设置说话人标签
+        text_manager.set_speaker_tag(0, "张三")
+        text_manager.set_speaker_tag(2, "李四")
+
+        assert text_manager.data[0].tag == "张三"
+        assert text_manager.data[1].tag == TextManager.DEFAULT_TAG  # 保持不变
+        assert text_manager.data[2].tag == "李四"
+        assert text_manager.data[3].tag == TextManager.PLACEHOLDER_TAG  # 保持不变
+
+    def test_set_speaker_tag_on_non_quote(self):
+        """测试在非引语上设置说话人标签（应该不生效）"""
+        text_manager = TextManager()
+        # 添加默认和占位符
+        text_manager.data.append(
+            TaggedTextSegment(content="默认文本", tag=TextManager.DEFAULT_TAG)
+        )
+        text_manager.data.append(
+            TaggedTextSegment(content="。", tag=TextManager.PLACEHOLDER_TAG)
+        )
+
+        # 在默认和占位符上设置说话人标签（应该不生效）
+        text_manager.set_speaker_tag(0, "张三")
+        text_manager.set_speaker_tag(1, "李四")
+
+        assert text_manager.data[0].tag == TextManager.DEFAULT_TAG  # 保持不变
+        assert text_manager.data[1].tag == TextManager.PLACEHOLDER_TAG  # 保持不变
+
+    def test_set_speaker_tag_out_of_bounds(self):
+        """测试越界索引设置说话人标签"""
+        text_manager = TextManager()
+        text_manager.data.append(
+            TaggedTextSegment(content="引语", tag=TextManager.QUOTE_TAG)
+        )
+
+        # 测试索引越界应该抛出异常
+        try:
+            text_manager.set_speaker_tag(5, "张三")
+            assert False, "应该抛出IndexError"
+        except IndexError:
+            pass  # 期望的行为
+
+    def test_remove_speaker_tags_by_name(self):
+        """测试按名称移除说话人标签"""
+        text_manager = TextManager()
+        # 添加不同标签的片段
+        text_manager.data.append(
+            TaggedTextSegment(content="引语1", tag="张三")
+        )
+        text_manager.data.append(
+            TaggedTextSegment(content="默认文本", tag=TextManager.DEFAULT_TAG)
+        )
+        text_manager.data.append(
+            TaggedTextSegment(content="引语2", tag="李四")
+        )
+        text_manager.data.append(
+            TaggedTextSegment(content="引语3", tag="张三")
+        )
+        text_manager.data.append(
+            TaggedTextSegment(content="。", tag=TextManager.PLACEHOLDER_TAG)
+        )
+        text_manager.data.append(
+            TaggedTextSegment(content="引语4", tag="王五")
+        )
+
+        # 移除"张三"的标签
+        text_manager.remove_speaker_tags_by_name("张三")
+
+        assert text_manager.data[0].tag == TextManager.QUOTE_TAG  # 从"张三"变回引语
+        assert text_manager.data[1].tag == TextManager.DEFAULT_TAG  # 保持不变
+        assert text_manager.data[2].tag == "李四"  # 保持不变
+        assert text_manager.data[3].tag == TextManager.QUOTE_TAG  # 从"张三"变回引语
+        assert text_manager.data[4].tag == TextManager.PLACEHOLDER_TAG  # 保持不变
+        assert text_manager.data[5].tag == "王五"  # 保持不变
+
+    def test_remove_nonexistent_speaker(self):
+        """测试移除不存在的说话人标签"""
+        text_manager = TextManager()
+        text_manager.data.append(
+            TaggedTextSegment(content="引语1", tag="张三")
+        )
+        text_manager.data.append(
+            TaggedTextSegment(content="引语2", tag="李四")
+        )
+
+        # 移除不存在的标签
+        text_manager.remove_speaker_tags_by_name("王五")
+
+        # 应该没有变化
+        assert text_manager.data[0].tag == "张三"
+        assert text_manager.data[1].tag == "李四"
+
+    def test_remove_speaker_on_non_character_tags(self):
+        """测试移除非人物标签"""
+        text_manager = TextManager()
+        text_manager.data.append(
+            TaggedTextSegment(content="A", tag="A")
+        )
+        text_manager.data.append(
+            TaggedTextSegment(content="B", tag="B")
+        )
+        text_manager.data.append(
+            TaggedTextSegment(content="C", tag="A")
+        )
+
+        # 移除默认标签和占位符标签
+        text_manager.remove_speaker_tags_by_name("A")
+        
+
+        assert text_manager.data[0].tag == TextManager.QUOTE_TAG
+        assert text_manager.data[1].tag == "B"  # 保持不变
+        assert text_manager.data[2].tag == TextManager.QUOTE_TAG
+
+        text_manager.remove_speaker_tags_by_name("B")
+
+        assert text_manager.data[0].tag == TextManager.QUOTE_TAG
+        assert text_manager.data[1].tag == TextManager.QUOTE_TAG
+        assert text_manager.data[2].tag == TextManager.QUOTE_TAG
+
+    def test_set_and_remove_workflow(self):
+        """测试设置和移除的完整工作流"""
+        text_manager = TextManager()
+        # 创建一些引语
+        for i in range(5):
+            text_manager.data.append(
+                TaggedTextSegment(content=f"引语{i}", tag=TextManager.QUOTE_TAG)
+            )
+
+        # 设置一些说话人标签
+        text_manager.set_speaker_tag(0, "张三")
+        text_manager.set_speaker_tag(1, "李四")
+        text_manager.set_speaker_tag(2, "张三")
+        text_manager.set_speaker_tag(3, "王五")
+        # 索引4保持为引语
+
+        # 验证设置
+        assert text_manager.data[0].tag == "张三"
+        assert text_manager.data[1].tag == "李四"
+        assert text_manager.data[2].tag == "张三"
+        assert text_manager.data[3].tag == "王五"
+        assert text_manager.data[4].tag == TextManager.QUOTE_TAG
+
+        # 移除"张三"的标签
+        text_manager.remove_speaker_tags_by_name("张三")
+
+        # 验证移除
+        assert text_manager.data[0].tag == TextManager.QUOTE_TAG  # 变回引语
+        assert text_manager.data[1].tag == "李四"  # 保持不变
+        assert text_manager.data[2].tag == TextManager.QUOTE_TAG  # 变回引语
+        assert text_manager.data[3].tag == "王五"  # 保持不变
+        assert text_manager.data[4].tag == TextManager.QUOTE_TAG  # 保持不变
+
+        # 移除"王五"的标签
+        text_manager.remove_speaker_tags_by_name("王五")
+
+        assert text_manager.data[3].tag == TextManager.QUOTE_TAG  # 变回引语
+
+    def test_set_speaker_tag_with_special_characters(self):
+        """测试使用特殊字符的说话人标签"""
+        text_manager = TextManager()
+        text_manager.data.append(
+            TaggedTextSegment(content="引语", tag=TextManager.QUOTE_TAG)
+        )
+
+        # 测试特殊字符的标签
+        special_names = ["张三-李四", "Mr. Smith", "User123", "角色_A"]
+        for i, name in enumerate(special_names):
+            text_manager.data.append(
+                TaggedTextSegment(content=f"引语{i}", tag=TextManager.QUOTE_TAG)
+            )
+            text_manager.set_speaker_tag(i + 1, name)  # +1因为第一个是QUOTE_TAG
+
+        # 验证设置
+        for i, name in enumerate(special_names):
+            assert text_manager.data[i + 1].tag == name
+
+        # 移除一个特殊标签
+        text_manager.remove_speaker_tags_by_name("Mr. Smith")
+        assert text_manager.data[2].tag == TextManager.QUOTE_TAG  # 索引2是Mr. Smith
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
