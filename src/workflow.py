@@ -23,12 +23,11 @@ class ProjectSetting:
 
 
 class Project:
-    def __init__(self, name: str, raw_text: str = "") -> None:
+    def __init__(self, name: str, raw_text: str = "", project_setting: ProjectSetting = None) -> None:
         self.name = name
         self.project_path = os.path.join(WORKSPACE_PATH, "projects", name)
         os.makedirs(self.project_path, exist_ok=True)
-        self.project_setting = ProjectSetting()
-
+        self.project_setting = project_setting if project_setting is not None else ProjectSetting()
         self.raw_text = raw_text
         self.text_manager = TextManager() if not raw_text else TextManager.convert_from_raw_text(
             text=raw_text,
