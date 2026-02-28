@@ -201,7 +201,7 @@ class Project:
         self.character_manager.set_character_requires_tts(name, requires_tts)
 
     def generate_character_description(self, name: str, suggestion: str = ""):
-        self.character_manager.generate_character_description(
+        return self.character_manager.generate_character_description(
             text=self.raw_text,
             character_name=name,
             suggestion=suggestion

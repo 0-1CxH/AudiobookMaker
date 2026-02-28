@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import {
     getSegments,
     getCharacters,
@@ -22,6 +22,8 @@ function CharacterEditModal({ character, projectId, onClose, onSaved }) {
     const [showSuggestionPopover, setShowSuggestionPopover] = useState(false)
     const [suggestionInput, setSuggestionInput] = useState('')
     const [submittingSuggestion, setSubmittingSuggestion] = useState(false)
+    const [descriptionHighlighted, setDescriptionHighlighted] = useState(false)
+    const descriptionTextareaRef = useRef(null)
 
     const handleSave = async () => {
         if (!name.trim()) {
@@ -71,11 +73,22 @@ function CharacterEditModal({ character, projectId, onClose, onSaved }) {
         try {
             setSubmittingSuggestion(true)
             const res = await generateCharacterDescription(projectId, character.name, suggestionInput.trim())
-            if (res.data?.description) {
-                setDescription(res.data.description)
+            // 支持两种响应格式：res.data?.description 或 res.description
+            const newDescription = res.data?.description || res.description
+            if (newDescription) {
+                setDescription(newDescription)
+                // 设置高亮状态并聚焦到textarea
+                setDescriptionHighlighted(true)
+                if (descriptionTextareaRef.current) {
+                    descriptionTextareaRef.current.focus()
+                    // 选中所有文本以便用户立即看到新内容
+                    descriptionTextareaRef.current.select()
+                }
                 setShowSuggestionPopover(false)
                 setSuggestionInput('')
                 addToast('AI描述已生成', 'success')
+            } else {
+                addToast('生成描述失败：未收到有效的描述', 'error')
             }
         } catch (err) {
             addToast('生成描述失败: ' + err.message, 'error')
@@ -83,6 +96,16 @@ function CharacterEditModal({ character, projectId, onClose, onSaved }) {
             setSubmittingSuggestion(false)
         }
     }
+
+    // 高亮效果定时器
+    useEffect(() => {
+        if (descriptionHighlighted) {
+            const timer = setTimeout(() => {
+                setDescriptionHighlighted(false)
+            }, 2000) // 2秒后取消高亮
+            return () => clearTimeout(timer)
+        }
+    }, [descriptionHighlighted])
 
     const handleCancelSuggestion = () => {
         setShowSuggestionPopover(false)
@@ -112,11 +135,16 @@ function CharacterEditModal({ character, projectId, onClose, onSaved }) {
                     <div className="form-group">
                         <label className="form-label">角色描述</label>
                         <textarea
+                            ref={descriptionTextareaRef}
                             className="textarea"
                             rows={4}
                             placeholder="角色描述..."
                             value={description}
                             onChange={e => setDescription(e.target.value)}
+                            style={{
+                                transition: 'background-color 0.5s ease',
+                                backgroundColor: descriptionHighlighted ? 'var(--highlight-bg, #fff3cd)' : ''
+                            }}
                         />
                         {!isNew && (
                             <div style={{ position: 'relative', display: 'inline-block' }}>
