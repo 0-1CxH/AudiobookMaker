@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+{% block title %}音频生成 - {{ project_id }}{% endblock %}
+
+{% set prev_url = '/project/' + project_id + '/voice' %}
+
+{% block nav %}
+{% include "partials/nav.html" %}
+{% endblock %}
+
+{% block content %}
+<!-- Progress & Actions -->
+<div class="card mb-lg">
+    <div class="card-header">
+        <h2>🔊 音频生成</h2>
+        <div class="flex gap-sm">
+            <button class="btn btn-primary" id="btn-generate" onclick="startGeneration()">🤖 AI音频生成</button>
+            <button class="btn btn-success" id="btn-render" onclick="renderFinalAudio()" disabled>🎵 渲染最终音频</button>
+        </div>
+    </div>
+
+    <!-- Progress Bar -->
+    <div class="progress-bar-container">
+        <div class="progress-bar-fill" id="progress-fill" style="width:0%"></div>
+    </div>
+    <div class="progress-info">
+        <span id="progress-text">加载中...</span>
+        <span id="progress-percent">0%</span>
+    </div>
+</div>
+
+<!-- Audio Segments List -->
+<div class="card">
+    <div class="card-header">
+        <h3>📋 音频片段</h3>
+        <span class="text-muted" id="segment-count" style="font-size:0.82rem;"></span>
+    </div>
+
+    <!-- Table Header -->
+    <div class="audio-segment-row"
+        style="font-size:0.78rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid var(--border-color);">
+        <div>#</div>
+        <div>内容</div>
+        <div>角色</div>
+        <div>状态</div>
+        <div>操作</div>
+    </div>
+
+    <div id="audio-segments-list">
+        <div class="skeleton skeleton-block"></div>
+        <div class="skeleton skeleton-block"></div>
+    </div>
+</div>
+
+<!-- Segment Detail Modal -->
+<div class="modal-overlay" id="segment-detail-modal">
+    <div class="modal">
+        <h2>📄 片段详情</h2>
+        <div id="segment-detail-content"></div>
+        <div class="form-actions">
+            <button class="btn btn-secondary" onclick="closeModal('segment-detail-modal')">关闭</button>
+        </div>
+    </div>
+</div>
+
+<!-- Render Complete Modal -->
+<div class="modal-overlay" id="render-modal">
+    <div class="modal" style="text-align:center;">
+        <h2>🎉 渲染完成</h2>
+        <p style="margin:var(--spacing-lg) 0;">最终音频文件已生成！</p>
+        <div id="render-info" style="font-size:0.88rem;color:var(--text-secondary);margin-bottom:var(--spacing-lg);">
+        </div>
+        <div class="form-actions" style="justify-content:center;">
+            <a class="btn btn-primary" id="btn-download" href="#" download>📥 下载文件</a>
+            <button class="btn btn-secondary" onclick="closeModal('render-modal')">关闭</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const projectId = "{{ project_id }}";
+    let segments = [];
+    let characters = [];
+    let colorMap = {};
+    let currentTaskId = null;
+    let pollInterval = null;
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        await loadCharacters();
+        await loadAudioSegments();
+        await updateProgress();
+    });
+
+    async function loadCharacters() {
+        try {
+            const data = await apiGet(`/projects/${projectId}/characters/`);
+            characters = data.data?.characters || [];
+            colorMap = buildCharacterColorMap(characters);
+        } catch (e) { /* ignore */ }
+    }
+
+    async function loadAudioSegments() {
+        const container = document.getElementById('audio-segments-list');
+        const counter = document.getElementById('segment-count');
+        try {
+            const data = await apiGet(`/projects/${projectId}/audio/segments`);
+            segments = data.data?.segments || [];
+            counter.textContent = `共 ${segments.length} 个片段`;
+            renderSegments();
+        } catch (e) {
+            container.innerHTML = `<div class="empty-state"><p>加载失败: ${escapeHtml(e.message)}</p></div>`;
+        }
+    }
+
+    function renderSegments() {
+        const container = document.getElementById('audio-segments-list');
+
+        container.innerHTML = segments.map(seg => {
+            const isGenerated = seg.has_audio;
+            const statusClass = isGenerated ? 'generated' : 'not-generated';
+            const statusText = isGenerated ? '● 已生成' : '○ 未生成';
+            const statusBadgeClass = isGenerated ? 'generated' : 'not-generated';
+            const contentColor = isGenerated ? '' : 'color:var(--text-disabled);';
+            const speaker = seg.allocated_speaker || (seg.tag === 'DEFAULT' ? '默认' : '–');
+            const speakerColor = colorMap[speaker]?.hex || 'var(--text-secondary)';
+
+            return `
+            <div class="audio-segment-row ${statusClass}" onclick="showSegmentDetail(${seg.index})">
+                <div class="font-mono">${seg.index}</div>
+                <div class="content-preview" style="${contentColor}" title="${escapeHtml(seg.content)}">${escapeHtml(truncateText(seg.content, 60))}</div>
+                <div style="color:${speakerColor};font-size:0.82rem;font-weight:600;">${escapeHtml(speaker)}</div>
+                <div><span class="status-badge ${statusBadgeClass}">${statusText}</span></div>
+                <div class="audio-actions" onclick="event.stopPropagation();">
+                    ${isGenerated ? `<button class="btn btn-ghost btn-sm" onclick="playSegmentAudio(${seg.index})">▶ 播放</button>` : ''}
+                    <button class="btn btn-ghost btn-sm" onclick="regenerateSegment(${seg.index})">${isGenerated ? '🔄' : '⚡ 生成'}</button>
+                </div>
+            </div>
+        `;
+        }).join('');
+    }
+
+    async function updateProgress() {
+        try {
+            const data = await apiGet(`/projects/${projectId}/audio/progress`);
+            const progress = data.data || {};
+            const pct = Math.round(progress.progress_percentage || 0);
+
+            document.getElementById('progress-fill').style.width = pct + '%';
+            document.getElementById('progress-percent').textContent = pct + '%';
+            document.getElementById('progress-text').textContent =
+                `${progress.generated_count || 0} / ${progress.total_count || 0} 片段已生成`;
+
+            // Enable render button when 100%
+            const renderBtn = document.getElementById('btn-render');
+            renderBtn.disabled = pct < 100;
+        } catch (e) {
+            document.getElementById('progress-text').textContent = '无法获取进度';
+        }
+    }
+
+    async function startGeneration() {
+        const btn = document.getElementById('btn-generate');
+        setButtonLoading(btn, true);
+        try {
+            const data = await apiPost(`/projects/${projectId}/audio/generate`);
+            currentTaskId = data.data?.task_id;
+            showToast('音频生成任务已启动', 'success');
+
+            // Start polling
+            if (pollInterval) clearInterval(pollInterval);
+            pollInterval = setInterval(pollGenerationStatus, 3000);
+        } catch (e) {
+            showToast('启动生成失败: ' + e.message, 'error');
+            setButtonLoading(btn, false);
+        }
+    }
+
+    async function pollGenerationStatus() {
+        if (!currentTaskId) return;
+
+        try {
+            const data = await apiGet(`/projects/${projectId}/audio/status/${currentTaskId}`);
+            const task = data.data || {};
+
+            if (task.status === 'completed') {
+                clearInterval(pollInterval);
+                pollInterval = null;
+                showToast('音频生成完成！', 'success');
+                const btn = document.getElementById('btn-generate');
+                setButtonLoading(btn, false);
+                await loadAudioSegments();
+                await updateProgress();
+            } else if (task.status === 'failed') {
+                clearInterval(pollInterval);
+                pollInterval = null;
+                showToast('音频生成失败: ' + (task.message || ''), 'error');
+                const btn = document.getElementById('btn-generate');
+                setButtonLoading(btn, false);
+            } else {
+                // Still running — update progress
+                await updateProgress();
+                await loadAudioSegments();
+            }
+        } catch (e) {
+            // Polling error, don't stop
+        }
+    }
+
+    async function regenerateSegment(index) {
+        try {
+            showToast(`正在重新生成片段 #${index}...`, 'info');
+            const data = await apiPost(`/projects/${projectId}/audio/segments/${index}/regenerate`);
+            showToast(data.message || '重新生成请求已发送', 'success');
+            await loadAudioSegments();
+            await updateProgress();
+        } catch (e) {
+            showToast('重新生成失败: ' + e.message, 'error');
+        }
+    }
+
+    function playSegmentAudio(index) {
+        // The audio file URL would typically be served by the backend
+        showToast(`播放片段 #${index} 的音频（功能待完善）`, 'info');
+    }
+
+    function showSegmentDetail(index) {
+        const seg = segments.find(s => s.index === index);
+        if (!seg) return;
+
+        const speaker = seg.allocated_speaker || (seg.tag === 'DEFAULT' ? '默认' : '–');
+        const content = document.getElementById('segment-detail-content');
+
+        content.innerHTML = `
+        <div class="form-group">
+            <label>内容</label>
+            <div style="padding:var(--spacing-md);background:var(--bg-glass);border-radius:var(--radius-md);font-size:0.92rem;line-height:1.7;">
+                ${escapeHtml(seg.content)}
+            </div>
+        </div>
+        <div class="form-group" style="display:grid;grid-template-columns:1fr 1fr;gap:var(--spacing-md);">
+            <div>
+                <label>分配角色</label>
+                <div style="font-weight:600;">${escapeHtml(speaker)}</div>
+            </div>
+            <div>
+                <label>状态</label>
+                <div>${seg.has_audio ? '<span class="text-success">● 已生成</span>' : '<span class="text-muted">○ 未生成</span>'}</div>
+            </div>
+        </div>
+        <div class="flex gap-sm mt-md">
+            ${seg.has_audio ? `<button class="btn btn-secondary btn-sm" onclick="playSegmentAudio(${seg.index})">▶ 播放音频</button>` : ''}
+            <button class="btn btn-secondary btn-sm" onclick="regenerateSegment(${seg.index}); closeModal('segment-detail-modal');">🔄 重新生成</button>
+        </div>
+    `;
+
+        openModal('segment-detail-modal');
+    }
+
+    async function renderFinalAudio() {
+        const btn = document.getElementById('btn-render');
+        setButtonLoading(btn, true);
+        try {
+            const data = await apiPost(`/projects/${projectId}/output/render`);
+            showToast('最终音频渲染完成！', 'success');
+
+            // Show render complete modal
+            document.getElementById('render-info').innerHTML = `
+            <p>文件: final_audio.wav</p>
+        `;
+            document.getElementById('btn-download').href = `/api/projects/${projectId}/output/download`;
+            openModal('render-modal');
+        } catch (e) {
+            showToast('渲染失败: ' + e.message, 'error');
+        } finally {
+            setButtonLoading(btn, false);
+        }
+    }
+
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', () => {
+        if (pollInterval) clearInterval(pollInterval);
+    });
+</script>
+{% endblock %}

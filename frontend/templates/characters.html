@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+{% block title %}角色提取 - {{ project_id }}{% endblock %}
+
+{% set prev_url = '/' %}
+{% set next_url = '/project/' + project_id + '/dialogues' %}
+
+{% block nav %}
+{% include "partials/nav.html" %}
+{% endblock %}
+
+{% block content %}
+<div class="split-layout">
+    <!-- Left: Text Segments -->
+    <div class="card">
+        <div class="card-header">
+            <h2>📝 文本预览</h2>
+            <span class="text-muted" id="segment-count" style="font-size:0.82rem;"></span>
+        </div>
+        <div class="segments-container" id="segments-list">
+            <div class="skeleton skeleton-block"></div>
+            <div class="skeleton skeleton-block"></div>
+            <div class="skeleton skeleton-block"></div>
+        </div>
+    </div>
+
+    <!-- Right: Character List -->
+    <div class="card">
+        <div class="card-header">
+            <h3>👥 角色列表</h3>
+        </div>
+        <div style="display:flex;gap:var(--spacing-sm);margin-bottom:var(--spacing-md);">
+            <button class="btn btn-primary btn-sm" id="btn-ai-extract" onclick="aiExtractCharacters()">🤖
+                AI角色提取</button>
+            <button class="btn btn-secondary btn-sm" onclick="openAddCharacterModal()">＋ 新建角色</button>
+        </div>
+        <div id="characters-list">
+            <div class="skeleton skeleton-block" style="height:80px"></div>
+            <div class="skeleton skeleton-block" style="height:80px"></div>
+        </div>
+        <div id="characters-empty" class="empty-state hidden" style="padding:var(--spacing-lg);">
+            <div class="icon">👤</div>
+            <h3>暂无角色</h3>
+            <p>使用AI提取或手动添加角色</p>
+        </div>
+    </div>
+</div>
+
+<!-- Add/Edit Character Modal -->
+<div class="modal-overlay" id="character-modal">
+    <div class="modal">
+        <h2 id="char-modal-title">✏️ 新建角色</h2>
+        <input type="hidden" id="char-editing-name" value="">
+
+        <div class="form-group">
+            <label for="char-name">角色名称</label>
+            <input type="text" class="form-input" id="char-name" placeholder="输入角色名称">
+        </div>
+
+        <div class="form-group">
+            <label for="char-desc">角色描述</label>
+            <textarea class="form-input" id="char-desc" rows="4" placeholder="描述角色的特点、性格等..."></textarea>
+            <button class="btn btn-ghost btn-sm mt-sm" id="btn-ai-desc" onclick="aiGenerateDescription()">🤖
+                AI生成描述</button>
+        </div>
+
+        <div class="form-group">
+            <label class="form-check">
+                <input type="checkbox" id="char-tts" checked>
+                使用TTS语音合成
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label for="char-voice">语音名称</label>
+            <input type="text" class="form-input" id="char-voice" placeholder="例如: voice_liubei">
+        </div>
+
+        <div class="form-actions">
+            <button class="btn btn-secondary" onclick="closeModal('character-modal')">取消</button>
+            <button class="btn btn-primary" id="btn-save-char" onclick="saveCharacter()">保存</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const projectId = "{{ project_id }}";
+    let currentCharacters = [];
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadSegments();
+        loadCharacters();
+    });
+
+    async function loadSegments() {
+        const container = document.getElementById('segments-list');
+        const counter = document.getElementById('segment-count');
+        try {
+            const data = await apiGet(`/projects/${projectId}/text/segments`);
+            const segments = data.data?.segments || [];
+            counter.textContent = `共 ${segments.length} 个片段`;
+
+            if (segments.length === 0) {
+                container.innerHTML = '<div class="empty-state"><p>暂无文本片段，请先处理文本</p></div>';
+                return;
+            }
+
+            container.innerHTML = segments.map(seg => {
+                const tagClass = seg.tag === 'DEFAULT' ? 'tag-default' :
+                    seg.tag === 'PLACEHOLDER' ? 'tag-placeholder' :
+                        seg.tag === 'QUOTE' ? 'tag-quote' : '';
+                return `
+                <div class="segment-block ${tagClass}">
+                    <div class="segment-index">#${seg.index} · ${seg.tag}</div>
+                    <div>${escapeHtml(seg.content)}</div>
+                </div>
+            `;
+            }).join('');
+        } catch (e) {
+            container.innerHTML = `<div class="empty-state"><p>加载失败: ${escapeHtml(e.message)}</p></div>`;
+        }
+    }
+
+    async function loadCharacters() {
+        const container = document.getElementById('characters-list');
+        const emptyState = document.getElementById('characters-empty');
+        try {
+            const data = await apiGet(`/projects/${projectId}/characters/`);
+            currentCharacters = data.data?.characters || [];
+
+            if (currentCharacters.length === 0) {
+                container.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                return;
+            }
+            emptyState.classList.add('hidden');
+
+            container.innerHTML = currentCharacters.map((ch, i) => {
+                const color = getCharacterColor(i);
+                return `
+                <div class="character-card">
+                    <div class="char-name">
+                        <span class="color-dot" style="background:${color.hex}"></span>
+                        ${escapeHtml(ch.name)}
+                    </div>
+                    <div class="char-desc">${escapeHtml(ch.description || '暂无描述')}</div>
+                    <div class="char-meta">
+                        <span>TTS: ${ch.requires_tts ? '✓' : '✕'}</span>
+                        ${ch.voice_name ? `<span>语音: ${escapeHtml(ch.voice_name)}</span>` : ''}
+                    </div>
+                    <div class="char-actions">
+                        <button class="btn btn-ghost btn-sm" onclick='openEditCharacterModal(${JSON.stringify(ch)})'>编辑</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteCharacter('${encodeURIComponent(ch.name)}')">删除</button>
+                    </div>
+                </div>
+            `;
+            }).join('');
+        } catch (e) {
+            container.innerHTML = `<div class="empty-state"><p>加载失败: ${escapeHtml(e.message)}</p></div>`;
+        }
+    }
+
+    async function aiExtractCharacters() {
+        const btn = document.getElementById('btn-ai-extract');
+        setButtonLoading(btn, true);
+        try {
+            const data = await apiPost(`/projects/${projectId}/characters/extract`);
+            showToast(data.message || 'AI角色提取完成', 'success');
+            loadCharacters();
+        } catch (e) {
+            showToast('AI角色提取失败: ' + e.message, 'error');
+        } finally {
+            setButtonLoading(btn, false);
+        }
+    }
+
+    function openAddCharacterModal() {
+        document.getElementById('char-modal-title').textContent = '✏️ 新建角色';
+        document.getElementById('char-editing-name').value = '';
+        document.getElementById('char-name').value = '';
+        document.getElementById('char-name').disabled = false;
+        document.getElementById('char-desc').value = '';
+        document.getElementById('char-tts').checked = true;
+        document.getElementById('char-voice').value = '';
+        openModal('character-modal');
+    }
+
+    function openEditCharacterModal(ch) {
+        document.getElementById('char-modal-title').textContent = `✏️ 编辑角色: ${ch.name}`;
+        document.getElementById('char-editing-name').value = ch.name;
+        document.getElementById('char-name').value = ch.name;
+        document.getElementById('char-name').disabled = true; // name is key, cannot change
+        document.getElementById('char-desc').value = ch.description || '';
+        document.getElementById('char-tts').checked = ch.requires_tts;
+        document.getElementById('char-voice').value = ch.voice_name || '';
+        openModal('character-modal');
+    }
+
+    async function saveCharacter() {
+        const editingName = document.getElementById('char-editing-name').value;
+        const name = document.getElementById('char-name').value.trim();
+        const description = document.getElementById('char-desc').value.trim();
+        const requires_tts = document.getElementById('char-tts').checked;
+        const voice_name = document.getElementById('char-voice').value.trim();
+
+        if (!name) { showToast('请输入角色名称', 'error'); return; }
+
+        const btn = document.getElementById('btn-save-char');
+        setButtonLoading(btn, true);
+        try {
+            if (editingName) {
+                // Update existing
+                await apiPut(`/projects/${projectId}/characters/${encodeURIComponent(editingName)}`, {
+                    description, requires_tts, voice_name
+                });
+                showToast('角色已更新', 'success');
+            } else {
+                // Create new
+                await apiPost(`/projects/${projectId}/characters/`, {
+                    name, description, requires_tts, voice_name
+                });
+                showToast('角色已添加', 'success');
+            }
+            closeModal('character-modal');
+            loadCharacters();
+        } catch (e) {
+            showToast('保存失败: ' + e.message, 'error');
+        } finally {
+            setButtonLoading(btn, false);
+        }
+    }
+
+    async function deleteCharacter(name) {
+        if (!confirmAction(`确定要删除角色 "${decodeURIComponent(name)}" 吗？`)) return;
+        try {
+            await apiDeleteMethod(`/projects/${projectId}/characters/${name}`);
+            showToast('角色已删除', 'success');
+            loadCharacters();
+        } catch (e) {
+            showToast('删除失败: ' + e.message, 'error');
+        }
+    }
+
+    async function aiGenerateDescription() {
+        const charName = document.getElementById('char-editing-name').value || document.getElementById('char-name').value.trim();
+        if (!charName) { showToast('请先输入角色名称', 'error'); return; }
+
+        const btn = document.getElementById('btn-ai-desc');
+        setButtonLoading(btn, true);
+        try {
+            const data = await apiPost(`/projects/${projectId}/characters/${encodeURIComponent(charName)}/generate-description`, {
+                suggestion: ''
+            });
+            if (data.data?.description) {
+                document.getElementById('char-desc').value = data.data.description;
+                showToast('AI描述生成完成', 'success');
+            }
+        } catch (e) {
+            showToast('AI描述生成失败: ' + e.message, 'error');
+        } finally {
+            setButtonLoading(btn, false);
+        }
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}ABM - 音频书制作工具{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>ABM — 音频书制作工具</h1>
+    <p>从文本到高质量有声书，AI驱动的全流程制作</p>
+</div>
+
+<!-- Project List -->
+<section>
+    <div class="card-header">
+        <h2>📚 所有项目</h2>
+        <button class="btn btn-primary" onclick="toggleCreateForm()">＋ 创建新项目</button>
+    </div>
+    <div id="project-list" class="project-grid">
+        <!-- loading skeletons -->
+        <div class="skeleton skeleton-block" style="height:120px"></div>
+        <div class="skeleton skeleton-block" style="height:120px"></div>
+        <div class="skeleton skeleton-block" style="height:120px"></div>
+    </div>
+    <div id="empty-state" class="empty-state hidden">
+        <div class="icon">📭</div>
+        <h3>暂无项目</h3>
+        <p>点击"创建新项目"开始您的有声书制作之旅</p>
+    </div>
+</section>
+
+<!-- Create Project Section -->
+<section class="create-project-section" id="create-section" style="display:none;">
+    <div class="card">
+        <h2 style="margin-bottom:var(--spacing-lg);">✨ 创建新项目</h2>
+
+        <div class="form-group">
+            <label for="project-name">项目名称</label>
+            <input type="text" class="form-input" id="project-name" placeholder="输入项目名称，例如：三国演义" autocomplete="off">
+        </div>
+
+        <div class="form-group">
+            <label>原始文本</label>
+            <div class="file-upload-area" id="upload-area" onclick="document.getElementById('file-input').click()">
+                <p>📄 拖拽文件到此处，或点击上传 (.txt / .md)</p>
+                <p style="font-size:0.78rem;margin-top:4px;">也可以直接在下方文本框中粘贴内容</p>
+                <input type="file" id="file-input" accept=".txt,.md" style="display:none"
+                    onchange="handleFileUpload(event)">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="raw-text">文本内容</label>
+            <textarea class="form-input" id="raw-text" rows="12" placeholder="在此粘贴文本内容..."></textarea>
+        </div>
+
+        <div style="display:flex;gap:var(--spacing-sm);justify-content:flex-end;">
+            <button class="btn btn-secondary" onclick="clearCreateForm()">清空</button>
+            <button class="btn btn-ghost" onclick="toggleCreateForm()">取消</button>
+            <button class="btn btn-primary" id="btn-create" onclick="createProject()">🚀 创建项目</button>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', loadProjects);
+
+    async function loadProjects() {
+        const container = document.getElementById('project-list');
+        const emptyState = document.getElementById('empty-state');
+        try {
+            const data = await apiGet('/projects/');
+            const projects = data.data?.projects || [];
+
+            if (projects.length === 0) {
+                container.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            container.innerHTML = projects.map(p => `
+            <div class="project-card" onclick="navigateTo('/project/${encodeURIComponent(p.project_id)}/characters')">
+                <div class="project-name">
+                    <span class="icon">📖</span>
+                    ${escapeHtml(p.name || p.project_id)}
+                </div>
+                <div class="project-stats">
+                    <div class="stat">角色: <span>${p.character_count ?? '–'}</span></div>
+                    <div class="stat">片段: <span>${p.segment_count ?? '–'}</span></div>
+                    <div class="stat">音频: <span>${p.generated_audio_count ?? '–'}</span></div>
+                </div>
+                <div style="margin-top:8px;">
+                    <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); navigateTo('/project/${encodeURIComponent(p.project_id)}/characters')">加载</button>
+                    <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); deleteProject('${encodeURIComponent(p.project_id)}')">删除</button>
+                </div>
+            </div>
+        `).join('');
+        } catch (e) {
+            container.innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><h3>加载失败</h3><p>${escapeHtml(e.message)}</p></div>`;
+        }
+    }
+
+    function toggleCreateForm() {
+        const section = document.getElementById('create-section');
+        section.style.display = section.style.display === 'none' ? 'block' : 'none';
+        if (section.style.display === 'block') {
+            document.getElementById('project-name').focus();
+        }
+    }
+
+    function clearCreateForm() {
+        document.getElementById('project-name').value = '';
+        document.getElementById('raw-text').value = '';
+    }
+
+    function handleFileUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            document.getElementById('raw-text').value = e.target.result;
+            showToast(`已加载文件: ${file.name}`, 'success');
+        };
+        reader.readAsText(file);
+    }
+
+    // Drag and drop support
+    const uploadArea = document.getElementById('upload-area');
+    if (uploadArea) {
+        uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+        uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    document.getElementById('raw-text').value = ev.target.result;
+                    showToast(`已加载文件: ${file.name}`, 'success');
+                };
+                reader.readAsText(file);
+            }
+        });
+    }
+
+    async function createProject() {
+        const name = document.getElementById('project-name').value.trim();
+        const rawText = document.getElementById('raw-text').value.trim();
+
+        if (!name) { showToast('请输入项目名称', 'error'); return; }
+        if (!rawText) { showToast('请输入或上传文本内容', 'error'); return; }
+
+        const btn = document.getElementById('btn-create');
+        setButtonLoading(btn, true);
+        try {
+            const result = await apiPost('/projects/', { name, raw_text: rawText });
+            showToast('项目创建成功！正在跳转...', 'success');
+            setTimeout(() => navigateTo(`/project/${encodeURIComponent(name)}/characters`), 800);
+        } catch (e) {
+            showToast('创建失败: ' + e.message, 'error');
+        } finally {
+            setButtonLoading(btn, false);
+        }
+    }
+
+    async function deleteProject(projectId) {
+        if (!confirmAction('确定要删除此项目吗？此操作不可恢复。')) return;
+        try {
+            await apiDeleteMethod(`/projects/${projectId}`);
+            showToast('项目已删除', 'success');
+            loadProjects();
+        } catch (e) {
+            showToast('删除失败: ' + e.message, 'error');
+        }
+    }
+</script>
+{% endblock %}

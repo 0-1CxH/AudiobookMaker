@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}ABM - 音频书制作工具{% endblock %}</title>
+    <meta name="description" content="ABM Audio Book Maker - 从文本生成高质量有声书">
+    <link rel="stylesheet" href="/static/css/style.css">
+    {% block extra_head %}{% endblock %}
+</head>
+
+<body>
+    {% block nav %}{% endblock %}
+
+    <div class="app-container">
+        {% block content %}{% endblock %}
+    </div>
+
+    <script src="/static/js/utils.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+
+</html>

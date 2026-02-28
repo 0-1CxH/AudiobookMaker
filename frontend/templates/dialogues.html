@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% block title %}对话分配 - {{ project_id }}{% endblock %}
+
+{% set prev_url = '/project/' + project_id + '/characters' %}
+{% set next_url = '/project/' + project_id + '/voice' %}
+
+{% block nav %}
+{% include "partials/nav.html" %}
+{% endblock %}
+
+{% block content %}
+<div class="split-layout">
+    <!-- Left: Text Segments with allocation -->
+    <div class="card">
+        <div class="card-header">
+            <h2>💬 对话分配</h2>
+            <div class="flex gap-sm" style="align-items:center;">
+                <span class="text-muted" id="alloc-stats" style="font-size:0.82rem;"></span>
+                <button class="btn btn-primary btn-sm" id="btn-ai-allocate" onclick="aiAllocateDialogues()">🤖
+                    AI对话分配</button>
+            </div>
+        </div>
+        <div class="segments-container" id="segments-list">
+            <div class="skeleton skeleton-block"></div>
+            <div class="skeleton skeleton-block"></div>
+            <div class="skeleton skeleton-block"></div>
+        </div>
+    </div>
+
+    <!-- Right: Character List (read-only) -->
+    <div class="card">
+        <div class="card-header">
+            <h3>👥 角色列表</h3>
+        </div>
+        <div id="characters-list">
+            <div class="skeleton skeleton-block" style="height:60px"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Active popover container -->
+<div id="popover-container"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const projectId = "{{ project_id }}";
+    let characters = [];
+    let colorMap = {};
+    let segments = [];
+    let activePopover = null;
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        await loadCharacters();
+        await loadDialogues();
+    });
+
+    // Close popover on outside click
+    document.addEventListener('click', (e) => {
+        if (activePopover && !e.target.closest('.popover') && !e.target.closest('.segment-block.tag-quote')) {
+            removePopover();
+        }
+    });
+
+    async function loadCharacters() {
+        try {
+            const data = await apiGet(`/projects/${projectId}/characters/`);
+            characters = data.data?.characters || [];
+            colorMap = buildCharacterColorMap(characters);
+            renderCharacterList();
+        } catch (e) {
+            showToast('加载角色失败: ' + e.message, 'error');
+        }
+    }
+
+    function renderCharacterList() {
+        const container = document.getElementById('characters-list');
+
+        if (characters.length === 0) {
+            container.innerHTML = '<div class="empty-state"><p>暂无角色，请先在角色提取页面添加</p></div>';
+            return;
+        }
+
+        container.innerHTML = characters.map((ch, i) => {
+            const color = getCharacterColor(i);
+            const allocCount = segments.filter(s => s.allocated_speaker === ch.name).length;
+            return `
+            <div class="character-card">
+                <div class="char-name">
+                    <span class="color-dot" style="background:${color.hex}"></span>
+                    ${escapeHtml(ch.name)}
+                </div>
+                <div class="char-meta">
+                    <span style="color:${color.hex}">■ 颜色</span>
+                    <span>已分配: ${allocCount}段</span>
+                </div>
+            </div>
+        `;
+        }).join('');
+    }
+
+    async function loadDialogues() {
+        const container = document.getElementById('segments-list');
+        const stats = document.getElementById('alloc-stats');
+        try {
+            const data = await apiGet(`/projects/${projectId}/dialogues/`);
+            segments = data.data?.segments || [];
+            const statistics = data.data?.statistics || {};
+
+            stats.textContent = `${statistics.allocated_quotes || 0}/${statistics.total_quotes || 0} 已分配`;
+
+            renderSegments();
+            renderCharacterList(); // refresh counts
+        } catch (e) {
+            container.innerHTML = `<div class="empty-state"><p>加载失败: ${escapeHtml(e.message)}</p></div>`;
+        }
+    }
+
+    function renderSegments() {
+        const container = document.getElementById('segments-list');
+
+        container.innerHTML = segments.map((seg, idx) => {
+            const isDefault = seg.tag === 'DEFAULT';
+            const isPlaceholder = seg.tag === 'PLACEHOLDER';
+            const isQuote = seg.tag === 'QUOTE';
+            const isAllocated = isQuote && seg.allocated_speaker;
+
+            let tagClass = isDefault ? 'tag-default' : isPlaceholder ? 'tag-placeholder' : 'tag-quote';
+            let allocatedClass = isAllocated ? 'allocated' : '';
+            let style = '';
+            let speakerLabel = '';
+
+            if (isAllocated) {
+                const color = colorMap[seg.allocated_speaker] || getCharacterColor(0);
+                style = `style="--segment-color:${color.hex};--segment-color-rgb:${color.rgb}"`;
+                speakerLabel = `<span class="speaker-label" style="--segment-color:${color.hex};--segment-color-rgb:${color.rgb}">${escapeHtml(seg.allocated_speaker)}</span>`;
+            }
+
+            const clickable = isQuote ? `onclick="handleSegmentClick(event, ${seg.index})" style="cursor:pointer;"` : '';
+
+            return `
+            <div class="segment-block ${tagClass} ${allocatedClass}" ${style} ${clickable} data-index="${seg.index}">
+                <div class="segment-index">#${seg.index} · ${seg.tag}${speakerLabel}</div>
+                <div>${escapeHtml(seg.content)}</div>
+            </div>
+        `;
+        }).join('');
+    }
+
+    function handleSegmentClick(event, segIndex) {
+        event.stopPropagation();
+        removePopover();
+
+        const block = event.currentTarget;
+        const rect = block.getBoundingClientRect();
+
+        const popover = document.createElement('div');
+        popover.className = 'popover';
+        popover.style.position = 'fixed';
+        popover.style.left = `${rect.left + rect.width / 2 - 80}px`;
+        popover.style.top = `${rect.bottom + 6}px`;
+        popover.style.zIndex = 2000;
+
+        let items = '<div class="popover-title">分配说话人:</div>';
+        characters.forEach((ch, i) => {
+            const color = getCharacterColor(i);
+            items += `
+            <div class="popover-item" onclick="assignSpeaker(${segIndex}, '${ch.name.replace(/'/g, "\\'")}')">
+                <span class="color-dot" style="background:${color.hex}"></span>
+                ${escapeHtml(ch.name)}
+            </div>
+        `;
+        });
+
+        popover.innerHTML = items;
+        document.body.appendChild(popover);
+        activePopover = popover;
+    }
+
+    function removePopover() {
+        if (activePopover) {
+            activePopover.remove();
+            activePopover = null;
+        }
+    }
+
+    async function assignSpeaker(segIndex, speaker) {
+        removePopover();
+        try {
+            await apiPut(`/projects/${projectId}/dialogues/${segIndex}`, { speaker });
+
+            // Update local state
+            const seg = segments.find(s => s.index === segIndex);
+            if (seg) seg.allocated_speaker = speaker;
+
+            renderSegments();
+            renderCharacterList();
+            showToast(`片段 #${segIndex} 已分配给 ${speaker}`, 'success');
+        } catch (e) {
+            showToast('分配失败: ' + e.message, 'error');
+        }
+    }
+
+    async function aiAllocateDialogues() {
+        const btn = document.getElementById('btn-ai-allocate');
+        setButtonLoading(btn, true);
+        try {
+            const data = await apiPost(`/projects/${projectId}/dialogues/allocate`);
+            showToast(data.message || 'AI对话分配完成', 'success');
+            await loadDialogues();
+        } catch (e) {
+            showToast('AI对话分配失败: ' + e.message, 'error');
+        } finally {
+            setButtonLoading(btn, false);
+        }
+    }
+</script>
+{% endblock %}

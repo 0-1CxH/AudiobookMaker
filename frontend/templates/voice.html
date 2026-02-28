@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+{% block title %}语音设计 - {{ project_id }}{% endblock %}
+
+{% set prev_url = '/project/' + project_id + '/dialogues' %}
+{% set next_url = '/project/' + project_id + '/audio' %}
+
+{% block nav %}
+{% include "partials/nav.html" %}
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>🎤 语音设计</h2>
+        <button class="btn btn-primary" id="btn-ai-voice" onclick="aiGenerateVoiceDesigns()">🤖 AI语音设计</button>
+    </div>
+
+    <div id="voice-table-container">
+        <div class="skeleton skeleton-block" style="height:200px"></div>
+    </div>
+</div>
+
+<!-- Edit Voice Design Modal -->
+<div class="modal-overlay" id="voice-modal">
+    <div class="modal">
+        <h2>🎤 编辑语音设计: <span id="voice-modal-name"></span></h2>
+
+        <div class="form-group">
+            <label for="voice-name-input">语音名称</label>
+            <input type="text" class="form-input" id="voice-name-input" readonly>
+        </div>
+
+        <div class="form-group">
+            <label for="voice-tts-instruction">TTS指令</label>
+            <textarea class="form-input" id="voice-tts-instruction" rows="5"
+                placeholder="描述语音特征，例如: 男性，中年，威严而仁厚，语速中等..."></textarea>
+            <button class="btn btn-ghost btn-sm mt-sm" id="btn-ai-tts" onclick="aiGenerateTTSInstruction()">🤖
+                AI生成TTS指令</button>
+        </div>
+
+        <div class="form-group">
+            <label for="voice-ref-text">参考文本</label>
+            <textarea class="form-input" id="voice-ref-text" rows="3" placeholder="这段文本将用于生成参考音频..."></textarea>
+        </div>
+
+        <div class="form-group">
+            <label>参考音频</label>
+            <div class="flex gap-sm" style="align-items:center;">
+                <span id="voice-ref-status" class="text-muted" style="font-size:0.85rem;">未生成</span>
+                <div id="voice-ref-player" class="hidden">
+                    <audio controls id="voice-ref-audio" style="height:32px;"></audio>
+                </div>
+                <button class="btn btn-secondary btn-sm" id="btn-gen-ref"
+                    onclick="generateReferenceAudio()">生成参考音频</button>
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button class="btn btn-secondary" onclick="closeModal('voice-modal')">取消</button>
+            <button class="btn btn-primary" id="btn-save-voice" onclick="saveVoiceDesign()">保存</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const projectId = "{{ project_id }}";
+    let characters = [];
+    let voiceDesigns = [];
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        await loadCharacters();
+        await loadVoiceDesigns();
+    });
+
+    async function loadCharacters() {
+        try {
+            const data = await apiGet(`/projects/${projectId}/characters/`);
+            characters = data.data?.characters || [];
+        } catch (e) {
+            showToast('加载角色失败: ' + e.message, 'error');
+        }
+    }
+
+    async function loadVoiceDesigns() {
+        const container = document.getElementById('voice-table-container');
+        try {
+            const data = await apiGet(`/projects/${projectId}/voice/designs`);
+            voiceDesigns = data.data?.voice_designs || [];
+            renderVoiceTable();
+        } catch (e) {
+            container.innerHTML = `<div class="empty-state"><p>加载失败: ${escapeHtml(e.message)}</p></div>`;
+        }
+    }
+
+    function renderVoiceTable() {
+        const container = document.getElementById('voice-table-container');
+
+        if (characters.length === 0) {
+            container.innerHTML = '<div class="empty-state"><p>暂无角色，请先在角色提取页面添加角色</p></div>';
+            return;
+        }
+
+        let html = `
+        <table class="voice-table">
+            <thead>
+                <tr>
+                    <th>角色</th>
+                    <th>语音设计信息</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+        characters.forEach((ch, i) => {
+            const color = getCharacterColor(i);
+            const design = voiceDesigns.find(d => d.name === ch.voice_name);
+            const noTTS = !ch.requires_tts;
+
+            html += `<tr class="${noTTS ? 'disabled-row' : ''}">`;
+            html += `<td>
+            <div class="flex gap-sm" style="align-items:center;">
+                <span class="color-dot" style="background:${color.hex};width:8px;height:8px;border-radius:50%;"></span>
+                <strong>${escapeHtml(ch.name)}</strong>
+            </div>
+        </td>`;
+
+            if (noTTS) {
+                html += `<td><span class="text-muted">(不需要TTS) 该角色不使用语音合成</span></td>`;
+                html += `<td><button class="btn btn-ghost btn-sm" onclick='openVoiceModal(${JSON.stringify(ch)})'>编辑</button></td>`;
+            } else if (design) {
+                const ttsPreview = truncateText(design.tts_instruction, 80);
+                html += `<td>
+                <div style="font-size:0.85rem;"><strong>语音名:</strong> ${escapeHtml(ch.voice_name || '–')}</div>
+                <div class="tts-preview mt-sm"><strong>TTS指令:</strong> ${escapeHtml(ttsPreview || '未设置')}</div>
+                <div class="mt-sm flex gap-sm" style="align-items:center;">
+                    <strong style="font-size:0.8rem;">参考音频:</strong>
+                    ${design.has_reference_audio
+                        ? '<span class="status-badge generated">● 已生成</span>'
+                        : '<span class="status-badge not-generated">○ 未生成</span>'}
+                </div>
+            </td>`;
+                html += `<td>
+                <button class="btn btn-ghost btn-sm" onclick='openVoiceModal(${JSON.stringify(ch)})'>编辑</button>
+            </td>`;
+            } else {
+                html += `<td><span class="text-muted">未进行语音设计</span></td>`;
+                html += `<td>
+                <button class="btn btn-ghost btn-sm" onclick='openVoiceModal(${JSON.stringify(ch)})'>编辑</button>
+            </td>`;
+            }
+
+            html += `</tr>`;
+        });
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+    }
+
+    let editingVoiceName = '';
+
+    function openVoiceModal(ch) {
+        editingVoiceName = ch.voice_name || ch.name;
+        document.getElementById('voice-modal-name').textContent = ch.name;
+        document.getElementById('voice-name-input').value = ch.voice_name || '';
+
+        const design = voiceDesigns.find(d => d.name === ch.voice_name);
+        document.getElementById('voice-tts-instruction').value = design?.tts_instruction || '';
+        document.getElementById('voice-ref-text').value = design?.reference_text || '';
+
+        if (design?.has_reference_audio) {
+            document.getElementById('voice-ref-status').textContent = '已生成';
+            document.getElementById('voice-ref-status').className = 'text-success';
+        } else {
+            document.getElementById('voice-ref-status').textContent = '未生成';
+            document.getElementById('voice-ref-status').className = 'text-muted';
+            document.getElementById('voice-ref-player').classList.add('hidden');
+        }
+
+        openModal('voice-modal');
+    }
+
+    async function saveVoiceDesign() {
+        const ttsInstruction = document.getElementById('voice-tts-instruction').value.trim();
+        const referenceText = document.getElementById('voice-ref-text').value.trim();
+
+        const btn = document.getElementById('btn-save-voice');
+        setButtonLoading(btn, true);
+        try {
+            await apiPut(`/projects/${projectId}/voice/designs/${encodeURIComponent(editingVoiceName)}/update`, {
+                tts_instruction: ttsInstruction,
+                reference_text: referenceText
+            });
+            showToast('语音设计已保存', 'success');
+            closeModal('voice-modal');
+            await loadVoiceDesigns();
+        } catch (e) {
+            showToast('保存失败: ' + e.message, 'error');
+        } finally {
+            setButtonLoading(btn, false);
+        }
+    }
+
+    async function aiGenerateVoiceDesigns() {
+        const btn = document.getElementById('btn-ai-voice');
+        setButtonLoading(btn, true);
+        try {
+            const data = await apiPost(`/projects/${projectId}/voice/generate-designs`);
+            showToast(data.message || 'AI语音设计完成', 'success');
+            await loadVoiceDesigns();
+        } catch (e) {
+            showToast('AI语音设计失败: ' + e.message, 'error');
+        } finally {
+            setButtonLoading(btn, false);
+        }
+    }
+
+    async function aiGenerateTTSInstruction() {
+        const btn = document.getElementById('btn-ai-tts');
+        setButtonLoading(btn, true);
+        try {
+            // This reuses the generate-designs endpoint which populates designs
+            const data = await apiPost(`/projects/${projectId}/voice/generate-designs`);
+            // Find the design for the current voice
+            const designs = data.data?.voice_designs || [];
+            const design = designs.find(d => d.name === editingVoiceName);
+            if (design) {
+                document.getElementById('voice-tts-instruction').value = design.tts_instruction || '';
+                document.getElementById('voice-ref-text').value = design.reference_text || '';
+                showToast('AI TTS指令生成完成', 'success');
+            } else {
+                showToast('未找到该语音的设计数据', 'error');
+            }
+        } catch (e) {
+            showToast('生成失败: ' + e.message, 'error');
+        } finally {
+            setButtonLoading(btn, false);
+        }
+    }
+
+    async function generateReferenceAudio() {
+        const btn = document.getElementById('btn-gen-ref');
+        setButtonLoading(btn, true);
+        try {
+            const data = await apiPost(`/projects/${projectId}/voice/generate-reference-audio`, {
+                character_name: editingVoiceName
+            });
+            showToast(data.message || '参考音频生成请求已发送', 'success');
+            await loadVoiceDesigns();
+        } catch (e) {
+            showToast('生成参考音频失败: ' + e.message, 'error');
+        } finally {
+            setButtonLoading(btn, false);
+        }
+    }
+</script>
+{% endblock %}

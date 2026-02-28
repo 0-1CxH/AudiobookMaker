@@ -1,0 +1,139 @@
+<!-- Workflow Navigation Bar (shared across pages 2-5) -->
+<nav class="workflow-nav">
+    <div class="workflow-nav-inner">
+        <!-- Project Title -->
+        <div class="project-title" id="project-title">📖 {{ project_id }}</div>
+
+        <!-- Steps -->
+        <div class="workflow-steps">
+            <a href="/" class="workflow-step {% if step == 1 %}active{% elif step > 1 %}completed{% endif %}"
+                title="项目选择">
+                <span class="step-icon">{% if step > 1 %}✓{% else %}1{% endif %}</span>
+                <span>项目选择</span>
+            </a>
+            <span class="step-connector {% if step > 1 %}completed{% endif %}"></span>
+
+            <a href="/project/{{ project_id }}/characters"
+                class="workflow-step {% if step == 2 %}active{% elif step > 2 %}completed{% endif %}" title="角色提取">
+                <span class="step-icon">{% if step > 2 %}✓{% elif step == 2 %}2{% else %}2{% endif %}</span>
+                <span>角色提取</span>
+            </a>
+            <span class="step-connector {% if step > 2 %}completed{% endif %}"></span>
+
+            <a href="/project/{{ project_id }}/dialogues"
+                class="workflow-step {% if step == 3 %}active{% elif step > 3 %}completed{% endif %}" title="对话分配">
+                <span class="step-icon">{% if step > 3 %}✓{% elif step == 3 %}3{% else %}3{% endif %}</span>
+                <span>对话分配</span>
+            </a>
+            <span class="step-connector {% if step > 3 %}completed{% endif %}"></span>
+
+            <a href="/project/{{ project_id }}/voice"
+                class="workflow-step {% if step == 4 %}active{% elif step > 4 %}completed{% endif %}" title="语音设计">
+                <span class="step-icon">{% if step > 4 %}✓{% elif step == 4 %}4{% else %}4{% endif %}</span>
+                <span>语音设计</span>
+            </a>
+            <span class="step-connector {% if step > 4 %}completed{% endif %}"></span>
+
+            <a href="/project/{{ project_id }}/audio" class="workflow-step {% if step == 5 %}active{% endif %}"
+                title="音频生成">
+                <span class="step-icon">{% if step == 5 %}5{% else %}5{% endif %}</span>
+                <span>音频生成</span>
+            </a>
+        </div>
+
+        <!-- Actions -->
+        <div class="nav-actions">
+            <button class="btn btn-secondary btn-sm" onclick="saveProject()" id="btn-save" title="保存项目">💾 保存</button>
+            <button class="btn btn-ghost btn-sm" onclick="openModal('settings-modal')" title="项目设置">⚙️ 设置</button>
+            {% if step > 2 %}
+            <a href="{{ prev_url or '/' }}" class="btn btn-ghost btn-sm" title="上一步">← 上一步</a>
+            {% endif %}
+            {% if step < 5 %} <a href="{{ next_url or '/' }}" class="btn btn-primary btn-sm" id="btn-next" title="下一步">
+                下一步 →</a>
+                {% endif %}
+                <a href="/" class="btn btn-ghost btn-sm" title="返回项目列表">🏠</a>
+        </div>
+    </div>
+</nav>
+
+<!-- Settings Modal -->
+<div class="modal-overlay" id="settings-modal">
+    <div class="modal">
+        <h2>⚙️ 项目设置</h2>
+        <div class="settings-grid">
+            <div class="form-group">
+                <label>文本分割方式</label>
+                <select class="form-input" id="setting-split-format">
+                    <option value="line">按行分割</option>
+                    <option value="sentence">按句子分割</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>引语检测方式</label>
+                <select class="form-input" id="setting-quote-format">
+                    <option value="auto">自动检测</option>
+                    <option value="manual">手动标记</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>上下文窗口大小</label>
+                <input type="number" class="form-input" id="setting-context-window" value="10" min="1" max="50">
+            </div>
+            <div class="form-group">
+                <label>默认空白时长 (秒)</label>
+                <input type="number" class="form-input" id="setting-default-duration" value="0.2" step="0.1" min="0">
+            </div>
+            <div class="form-group">
+                <label>换行停顿时长 (秒)</label>
+                <input type="number" class="form-input" id="setting-line-break-duration" value="0.5" step="0.1" min="0">
+            </div>
+            <div class="form-group">
+                <label>句间停顿时长 (秒)</label>
+                <input type="number" class="form-input" id="setting-sentence-margin" value="0.3" step="0.1" min="0">
+            </div>
+        </div>
+        <p class="text-muted mt-md" style="font-size:0.78rem;">注意：更改部分设置可能需要重新处理文本或重新生成音频。</p>
+        <div class="form-actions">
+            <button class="btn btn-secondary" onclick="closeModal('settings-modal')">取消</button>
+            <button class="btn btn-primary" onclick="saveSettings()">保存设置</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const PROJECT_ID = "{{ project_id }}";
+
+    async function saveProject() {
+        const btn = document.getElementById('btn-save');
+        setButtonLoading(btn, true);
+        try {
+            // Saving is done through the backend's save mechanism
+            // which is triggered when we make changes
+            showToast('项目已保存', 'success');
+        } catch (e) {
+            showToast('保存失败: ' + e.message, 'error');
+        } finally {
+            setButtonLoading(btn, false);
+        }
+    }
+
+    async function saveSettings() {
+        try {
+            const settings = {
+                project_setting: {
+                    split_format: document.getElementById('setting-split-format').value,
+                    quote_format: document.getElementById('setting-quote-format').value,
+                    context_window: parseInt(document.getElementById('setting-context-window').value),
+                    default_duration: parseFloat(document.getElementById('setting-default-duration').value),
+                    line_break_duration: parseFloat(document.getElementById('setting-line-break-duration').value),
+                    sentence_margin_duration: parseFloat(document.getElementById('setting-sentence-margin').value),
+                }
+            };
+            await apiPut(`/projects/${PROJECT_ID}`, settings);
+            showToast('设置已保存', 'success');
+            closeModal('settings-modal');
+        } catch (e) {
+            showToast('保存设置失败: ' + e.message, 'error');
+        }
+    }
+</script>
