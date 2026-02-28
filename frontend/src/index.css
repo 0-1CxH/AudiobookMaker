@@ -1178,3 +1178,23 @@ a:hover {
         grid-template-columns: 40px 1fr 80px;
     }
 }
+
+/* ===== CharacterExtract Segment Styles ===== */
+.segment-block-extract {
+    cursor: default !important;
+}
+
+.segment-block-extract.tag-default,
+.segment-block-extract.tag-placeholder,
+.segment-block-extract.tag-quote {
+    color: var(--text-primary) !important;
+}
+
+.segment-block-extract.tag-default:hover,
+.segment-block-extract.tag-placeholder:hover,
+.segment-block-extract.tag-quote:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: var(--shadow-md) !important;
+    border-color: var(--border-color) !important;
+    cursor: default !important;
+}

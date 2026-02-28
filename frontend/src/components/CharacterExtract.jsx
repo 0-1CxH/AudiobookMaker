@@ -387,7 +387,7 @@ export default function CharacterExtract({ projectId }) {
                                             const tagClass = isPlaceholder ? 'tag-placeholder' : isDefault ? 'tag-default' : 'tag-quote'
 
                                             return (
-                                                <div key={idx} className={`segment-block ${tagClass}`} style={{
+                                                <div key={idx} className={`segment-block segment-block-extract ${tagClass}`} style={{
                                                     display: isPlaceholderRow ? 'inline-block' : 'block',
                                                     marginBottom: 0,
                                                     marginRight: isPlaceholderRow && isPlaceholder ? 0 : 'var(--space-2)'
