@@ -86,8 +86,9 @@ export default function DialogueAssign({ projectId }) {
     }
 
     const handleSegmentClick = (seg, e) => {
-        // Only allow clicking on QUOTE segments
-        if (seg.tag !== 'QUOTE') return
+        // 只允许点击非DEFAULT和非PLACEHOLDER的segment（即可分配的segment）
+        // DEFAULT和PLACEHOLDER不可分配，不需要点击
+        if (seg.tag === 'DEFAULT' || seg.tag === 'PLACEHOLDER') return
 
         const rect = e.currentTarget.getBoundingClientRect()
         setPopover({
@@ -146,8 +147,10 @@ export default function DialogueAssign({ projectId }) {
 
                         return paginatedSegments.map((seg) => {
                             const isPlaceholder = seg.tag === 'PLACEHOLDER'
-                            const isQuote = seg.tag === 'QUOTE'
-                            const isAssigned = isQuote && seg.allocated_speaker
+                            const isDefault = seg.tag === 'DEFAULT'
+                            const isNonAssignable = isPlaceholder || isDefault  // 不可分配的segment
+                            const isAssignable = !isNonAssignable  // 可分配的segment（包括QUOTE和已分配角色名）
+                            const isAssigned = isAssignable && seg.allocated_speaker
                             const speakerColor = isAssigned ? charColorMap[seg.allocated_speaker] : null
 
                             if (isPlaceholder && (seg.content === '\n' || seg.content.trim() === '')) {
@@ -156,16 +159,18 @@ export default function DialogueAssign({ projectId }) {
 
                             let tagClass = 'tag-default'
                             if (isPlaceholder) tagClass = 'tag-placeholder'
-                            else if (isQuote && isAssigned) tagClass = 'tag-quote assigned'
-                            else if (isQuote) tagClass = 'tag-quote unassigned'
+                            else if (isDefault) tagClass = 'tag-default'
+                            else if (isAssignable && isAssigned) tagClass = 'tag-quote assigned'
+                            else if (isAssignable) tagClass = 'tag-quote unassigned'
 
                             return (
                                 <div
                                     key={seg.index}
                                     className={`segment-block ${tagClass}`}
-                                    onClick={isQuote ? (e) => handleSegmentClick(seg, e) : undefined}
+                                    onClick={isAssignable ? (e) => handleSegmentClick(seg, e) : undefined}
                                     style={{
-                                        cursor: isQuote ? 'pointer' : 'default',
+                                        cursor: isAssignable ? 'pointer' : 'default',
+                                        color: isNonAssignable ? 'var(--text-muted)' : 'var(--text-primary)',
                                         display: 'block',
                                         width: 'fit-content',
                                         ...(isAssigned && speakerColor

@@ -617,11 +617,25 @@ a:hover {
     background: transparent;
 }
 
+.segment-block.tag-default:hover {
+    transform: none;
+    box-shadow: none;
+    border-color: transparent;
+    cursor: default;
+}
+
 .segment-block.tag-placeholder {
     color: var(--text-disabled);
     background: transparent;
     font-style: italic;
     padding: var(--space-1) var(--space-4);
+}
+
+.segment-block.tag-placeholder:hover {
+    transform: none;
+    box-shadow: none;
+    border-color: transparent;
+    cursor: default;
 }
 
 .segment-block.tag-quote {

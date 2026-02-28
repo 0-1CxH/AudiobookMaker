@@ -246,6 +246,9 @@ class TextManager:
         self.allocation_map = {}
 
         for segment_index, quote, context_text in self.iterate_quote_and_context(context_window):
+            if segment_index in self.allocation_map:
+                continue  # 已经分配过了
+            print(f"正在处理引语索引 {segment_index}，内容：{quote}，上下文：{context_text}")
             # 构造LLM提示词，判断谁在说这句引语
             prompt = f"""请分析以下引语及其上下文，判断这句话最有可能是由哪个角色说出的。
 

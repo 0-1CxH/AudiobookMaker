@@ -256,10 +256,19 @@ class ProjectAdapter:
 
         segments = []
         for i, segment in enumerate(self.project.text_manager.data):
+            # 转换tag值为前端友好的格式
+            tag = segment.tag
+            if tag == "__quote__":
+                tag = "QUOTE"
+            elif tag == "__placeholder__":
+                tag = "PLACEHOLDER"
+            elif tag == "__default__":
+                tag = "DEFAULT"
+
             segments.append({
                 'index': i,
                 'content': segment.content,
-                'tag': segment.tag,
+                'tag': tag,
                 'allocated_speaker': self.project.text_manager.allocation_map.get(i),
                 'has_audio': i in self.project.text_to_audio_segment_map
             })
