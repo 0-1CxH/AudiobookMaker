@@ -1,0 +1,382 @@
+import React, { useState, useEffect, useCallback, useRef } from 'react'
+import {
+    getAudioSegments,
+    getAudioProgress,
+    generateAudio,
+    getAudioStatus,
+    regenerateSegment,
+    renderAudio,
+    getOutputStatus,
+    getDownloadUrl,
+} from '../api.js'
+import { useToast } from '../App.jsx'
+
+// ===== Segment Detail Modal =====
+function SegmentDetailModal({ segment, projectId, onClose, onRegenerated }) {
+    const addToast = useToast()
+    const [regenerating, setRegenerating] = useState(false)
+
+    const handleRegenerate = async () => {
+        try {
+            setRegenerating(true)
+            await regenerateSegment(projectId, segment.index)
+            addToast(`片段 #${segment.index} 正在重新生成`, 'success')
+            onRegenerated()
+        } catch (err) {
+            addToast('重新生成失败: ' + err.message, 'error')
+        } finally {
+            setRegenerating(false)
+        }
+    }
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 500 }}>
+                <div className="modal-header">
+                    <h2>片段 #{segment.index} 详细信息</h2>
+                    <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
+                </div>
+                <div className="modal-body">
+                    <div className="form-group">
+                        <label className="form-label">内容</label>
+                        <div style={{
+                            background: 'var(--bg-input)',
+                            padding: 'var(--space-3)',
+                            borderRadius: 'var(--radius-sm)',
+                            fontSize: 'var(--font-size-sm)',
+                            lineHeight: 1.7,
+                        }}>
+                            {segment.content}
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-4)' }}>
+                        <div className="form-group">
+                            <label className="form-label">分配角色</label>
+                            <div className="text-sm">{segment.allocated_speaker || segment.tag}</div>
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">生成状态</label>
+                            <div className="text-sm" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                                <span className={`status-dot ${segment.has_audio ? 'generated' : 'not-generated'}`} />
+                                {segment.has_audio ? '已生成' : '未生成'}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 'var(--space-3)', marginTop: 'var(--space-4)' }}>
+                        {segment.has_audio && (
+                            <button className="btn btn-secondary btn-sm">▶ 播放音频</button>
+                        )}
+                        <button
+                            className="btn btn-secondary btn-sm"
+                            onClick={handleRegenerate}
+                            disabled={regenerating}
+                        >
+                            {regenerating ? '🔄 重新生成中...' : '🔄 重新生成'}
+                        </button>
+                    </div>
+                </div>
+                <div className="modal-footer">
+                    <button className="btn btn-ghost" onClick={onClose}>关闭</button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// ===== Render Complete Modal =====
+function RenderCompleteModal({ projectId, outputStatus, onClose }) {
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 440 }}>
+                <div className="modal-header">
+                    <h2>🎉 渲染完成</h2>
+                    <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
+                </div>
+                <div className="modal-body text-center">
+                    <div style={{ fontSize: 48, marginBottom: 'var(--space-4)' }}>✅</div>
+                    <p style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, marginBottom: 'var(--space-4)' }}>
+                        最终音频文件已生成！
+                    </p>
+                    {outputStatus?.file_info && (
+                        <div className="text-sm text-muted" style={{ marginBottom: 'var(--space-4)' }}>
+                            <div>文件大小: {(outputStatus.file_info.size / (1024 * 1024)).toFixed(1)} MB</div>
+                        </div>
+                    )}
+                    <a
+                        href={getDownloadUrl(projectId)}
+                        className="btn btn-primary btn-lg"
+                        download
+                        style={{ textDecoration: 'none' }}
+                    >
+                        📥 下载文件
+                    </a>
+                </div>
+                <div className="modal-footer">
+                    <button className="btn btn-ghost" onClick={onClose}>关闭</button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// ===== Main Component =====
+export default function AudioGenerate({ projectId }) {
+    const addToast = useToast()
+    const [segments, setSegments] = useState([])
+    const [progress, setProgress] = useState({ generated_count: 0, total_count: 0, progress_percentage: 0 })
+    const [loading, setLoading] = useState(true)
+    const [generating, setGenerating] = useState(false)
+    const [rendering, setRendering] = useState(false)
+    const [taskId, setTaskId] = useState(null)
+    const [selectedSegment, setSelectedSegment] = useState(null)
+    const [showRenderComplete, setShowRenderComplete] = useState(false)
+    const [outputStatus, setOutputStatus] = useState(null)
+    const pollRef = useRef(null)
+
+    const fetchData = useCallback(async () => {
+        try {
+            setLoading(true)
+            const [segRes, progRes] = await Promise.all([
+                getAudioSegments(projectId),
+                getAudioProgress(projectId),
+            ])
+            setSegments(segRes.data?.segments || [])
+            setProgress(progRes.data || { generated_count: 0, total_count: 0, progress_percentage: 0 })
+        } catch (err) {
+            addToast('加载数据失败: ' + err.message, 'error')
+        } finally {
+            setLoading(false)
+        }
+    }, [projectId])
+
+    useEffect(() => {
+        fetchData()
+        return () => {
+            if (pollRef.current) clearInterval(pollRef.current)
+        }
+    }, [fetchData])
+
+    // Poll task status
+    useEffect(() => {
+        if (!taskId) return
+
+        pollRef.current = setInterval(async () => {
+            try {
+                const res = await getAudioStatus(projectId, taskId)
+                const status = res.data?.status
+
+                if (status === 'completed') {
+                    clearInterval(pollRef.current)
+                    pollRef.current = null
+                    setTaskId(null)
+                    setGenerating(false)
+                    addToast('音频生成完成！', 'success')
+                    fetchData()
+                } else if (status === 'failed') {
+                    clearInterval(pollRef.current)
+                    pollRef.current = null
+                    setTaskId(null)
+                    setGenerating(false)
+                    addToast('音频生成失败: ' + (res.data?.message || '未知错误'), 'error')
+                    fetchData()
+                } else {
+                    // Update progress
+                    if (res.data?.progress) {
+                        setProgress(prev => ({ ...prev, progress_percentage: res.data.progress }))
+                    }
+                }
+            } catch (err) {
+                // Ignore polling errors
+            }
+        }, 3000)
+
+        return () => {
+            if (pollRef.current) clearInterval(pollRef.current)
+        }
+    }, [taskId, projectId])
+
+    const handleGenerate = async () => {
+        try {
+            setGenerating(true)
+            addToast('正在生成音频...', 'info')
+            const res = await generateAudio(projectId)
+            if (res.data?.task_id) {
+                setTaskId(res.data.task_id)
+            } else {
+                // Synchronous completion
+                setGenerating(false)
+                addToast('音频生成完成', 'success')
+                fetchData()
+            }
+        } catch (err) {
+            setGenerating(false)
+            addToast('音频生成失败: ' + err.message, 'error')
+        }
+    }
+
+    const handleRender = async () => {
+        try {
+            setRendering(true)
+            addToast('正在渲染最终音频...', 'info')
+            await renderAudio(projectId)
+            const statusRes = await getOutputStatus(projectId)
+            setOutputStatus(statusRes.data)
+            setShowRenderComplete(true)
+            addToast('最终音频渲染完成！', 'success')
+        } catch (err) {
+            addToast('渲染失败: ' + err.message, 'error')
+        } finally {
+            setRendering(false)
+        }
+    }
+
+    const pct = progress.progress_percentage || 0
+    const isComplete = pct >= 100 || (progress.generated_count > 0 && progress.generated_count === progress.total_count)
+
+    if (loading) {
+        return (
+            <div className="loading-spinner">
+                <div className="spinner" />
+            </div>
+        )
+    }
+
+    return (
+        <>
+            <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
+                <div className="card-header">
+                    <span className="card-title">🎵 音频生成</span>
+                </div>
+
+                {/* Progress Bar */}
+                <div style={{ marginBottom: 'var(--space-5)' }}>
+                    <div className="progress-bar-container">
+                        <div
+                            className="progress-bar-fill"
+                            style={{ width: `${isComplete ? 100 : pct}%` }}
+                        />
+                    </div>
+                    <div className="progress-info">
+                        <span>{progress.generated_count}/{progress.total_count} 片段已生成</span>
+                        <span>{isComplete ? 100 : Math.round(pct)}%</span>
+                    </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
+                    <button
+                        className="btn btn-primary"
+                        onClick={handleGenerate}
+                        disabled={generating}
+                    >
+                        {generating ? '🔄 生成中...' : '🤖 AI音频生成'}
+                    </button>
+                    <button
+                        className="btn btn-success"
+                        onClick={handleRender}
+                        disabled={rendering || !isComplete}
+                    >
+                        {rendering ? '🔄 渲染中...' : '🎬 渲染最终音频'}
+                    </button>
+                    {!isComplete && (
+                        <span className="text-xs text-muted" style={{ alignSelf: 'center' }}>
+                            进度达到100%后可渲染最终音频
+                        </span>
+                    )}
+                </div>
+            </div>
+
+            {/* Segments List */}
+            <div className="card">
+                <div className="card-header">
+                    <span className="card-title">📋 文本片段状态</span>
+                    <span className="text-xs text-muted">点击查看详情</span>
+                </div>
+
+                <div className="audio-segments-list">
+                    {segments.map((seg) => {
+                        if (seg.tag === 'PLACEHOLDER' && (seg.content === '\n' || seg.content.trim() === '')) {
+                            return null
+                        }
+
+                        const isGenerated = seg.has_audio
+
+                        return (
+                            <div
+                                key={seg.index}
+                                className={`audio-segment-item ${isGenerated ? 'generated' : 'not-generated'}`}
+                                onClick={() => setSelectedSegment(seg)}
+                            >
+                                <span className="text-xs" style={{ opacity: 0.5 }}>#{seg.index}</span>
+                                <span className="truncate">
+                                    {seg.content.length > 50 ? seg.content.substring(0, 50) + '...' : seg.content}
+                                </span>
+                                <span className="text-xs">{seg.allocated_speaker || seg.tag}</span>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <span className={`status-dot ${isGenerated ? 'generated' : 'not-generated'}`} />
+                                    <span className="text-xs">{isGenerated ? '已生成' : '未生成'}</span>
+                                </span>
+                                <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                                    {isGenerated && (
+                                        <button className="btn btn-ghost btn-sm" onClick={e => { e.stopPropagation() }}>
+                                            ▶
+                                        </button>
+                                    )}
+                                    <button
+                                        className="btn btn-ghost btn-sm"
+                                        onClick={async (e) => {
+                                            e.stopPropagation()
+                                            try {
+                                                await regenerateSegment(projectId, seg.index)
+                                                addToast(`片段 #${seg.index} 正在重新生成`, 'info')
+                                                setTimeout(fetchData, 2000)
+                                            } catch (err) {
+                                                addToast('重新生成失败: ' + err.message, 'error')
+                                            }
+                                        }}
+                                    >
+                                        🔄
+                                    </button>
+                                </div>
+                            </div>
+                        )
+                    })}
+                </div>
+
+                {/* Legend */}
+                <div className="text-xs text-muted mt-4" style={{ display: 'flex', gap: 'var(--space-4)' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span className="status-dot generated" /> 已生成（黑色文字）
+                    </span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span className="status-dot not-generated" /> 未生成（灰色文字）
+                    </span>
+                </div>
+            </div>
+
+            {/* Segment Detail Modal */}
+            {selectedSegment && (
+                <SegmentDetailModal
+                    segment={selectedSegment}
+                    projectId={projectId}
+                    onClose={() => setSelectedSegment(null)}
+                    onRegenerated={() => {
+                        setSelectedSegment(null)
+                        setTimeout(fetchData, 2000)
+                    }}
+                />
+            )}
+
+            {/* Render Complete Modal */}
+            {showRenderComplete && (
+                <RenderCompleteModal
+                    projectId={projectId}
+                    outputStatus={outputStatus}
+                    onClose={() => setShowRenderComplete(false)}
+                />
+            )}
+        </>
+    )
+}
