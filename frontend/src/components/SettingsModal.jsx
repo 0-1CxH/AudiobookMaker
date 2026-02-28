@@ -1,10 +1,11 @@
-import React, { useState } from 'react'
-import { updateProjectSettings } from '../api.js'
+import React, { useState, useEffect } from 'react'
+import { getProject, updateProjectSettings } from '../api.js'
 import { useToast } from '../App.jsx'
 
 export default function SettingsModal({ projectId, onClose }) {
     const addToast = useToast()
     const [saving, setSaving] = useState(false)
+    const [loading, setLoading] = useState(true)
 
     const [settings, setSettings] = useState({
         split_format: 'line',
@@ -13,10 +14,33 @@ export default function SettingsModal({ projectId, onClose }) {
         default_duration: 0.2,
         line_break_duration: 0.5,
         sentence_margin_duration: 0.3,
+        voice_lib_folder_path: './workspace/voice_lib',
         design_model_path: './workspace/design_model',
         clone_model_path: './workspace/clone_model',
         use_flash_attention: false,
     })
+
+    useEffect(() => {
+        const fetchProjectSettings = async () => {
+            try {
+                setLoading(true)
+                const res = await getProject(projectId)
+                if (res.data?.project_setting) {
+                    setSettings(prev => ({
+                        ...prev,
+                        ...res.data.project_setting
+                    }))
+                }
+            } catch (err) {
+                addToast('加载项目设置失败: ' + err.message, 'error')
+                onClose()
+            } finally {
+                setLoading(false)
+            }
+        }
+
+        fetchProjectSettings()
+    }, [projectId, addToast, onClose])
 
     const handleChange = (key, value) => {
         setSettings(prev => ({ ...prev, [key]: value }))
@@ -43,7 +67,14 @@ export default function SettingsModal({ projectId, onClose }) {
                     <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
                 </div>
                 <div className="modal-body">
-                    {/* Text Processing */}
+                    {loading ? (
+                        <div className="loading-spinner" style={{ textAlign: 'center', padding: 'var(--space-8)' }}>
+                            <div className="spinner" style={{ margin: '0 auto' }} />
+                            <p style={{ marginTop: 'var(--space-3)' }}>加载项目设置中...</p>
+                        </div>
+                    ) : (
+                        <>
+                            {/* Text Processing */}
                     <div className="settings-section">
                         <h3>文本处理设置</h3>
                         <div className="settings-grid">
@@ -127,6 +158,15 @@ export default function SettingsModal({ projectId, onClose }) {
                     <div className="settings-section">
                         <h3>TTS模型路径</h3>
                         <div className="form-group">
+                            <label className="form-label">声音库文件夹路径</label>
+                            <input
+                                className="input"
+                                type="text"
+                                value={settings.voice_lib_folder_path}
+                                onChange={e => handleChange('voice_lib_folder_path', e.target.value)}
+                            />
+                        </div>
+                        <div className="form-group">
                             <label className="form-label">设计模型路径</label>
                             <input
                                 className="input"
@@ -159,10 +199,12 @@ export default function SettingsModal({ projectId, onClose }) {
                     <p className="text-xs text-muted" style={{ marginTop: 'var(--space-2)' }}>
                         ⚠️ 更改部分设置可能需要重新处理文本或重新生成音频
                     </p>
+                        </>
+                    )}
                 </div>
                 <div className="modal-footer">
                     <button className="btn btn-ghost" onClick={onClose}>取消</button>
-                    <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+                    <button className="btn btn-primary" onClick={handleSave} disabled={saving || loading}>
                         {saving ? '保存中...' : '保存设置'}
                     </button>
                 </div>

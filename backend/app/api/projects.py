@@ -164,11 +164,25 @@ def update_project(project_id):
                 error=f'Project {project_id} not found'
             ).dict()), 404
 
-        # 目前只支持更新原始文本
-        raw_text = data.get('raw_text')
-        if raw_text is not None:
-            # TODO: 实现更新文本的功能
-            pass
+        # 支持更新项目设置
+        project_setting = data.get('project_setting')
+
+        updated = False
+
+        if project_setting is not None:
+            # 更新项目设置
+            result = adapter.update_settings(project_setting)
+            if not result.get('success'):
+                return jsonify(ErrorResponse(
+                    error=result.get('error', 'Failed to update settings')
+                ).dict()), 400
+            updated = True
+
+        if not updated:
+            # 没有提供任何更新字段
+            return jsonify(ErrorResponse(
+                error='No update fields provided (supported: raw_text, project_setting)'
+            ).dict()), 400
 
         return jsonify(StandardResponse(
             success=True,

@@ -94,7 +94,8 @@ class ProjectAdapter:
             'segment_count': len(self.project.text_manager.data),
             'allocated_dialogues': len(self.project.text_manager.allocation_map),
             'generated_audio_count': len(self.project.text_to_audio_segment_map),
-            'raw_text_length': len(self.project.raw_text) if self.project.raw_text else 0
+            'raw_text_length': len(self.project.raw_text) if self.project.raw_text else 0,
+            'project_setting': asdict(self.project.project_setting) if self.project.project_setting else None
         }
 
     def extract_characters(self) -> Dict[str, Any]:
@@ -148,6 +149,36 @@ class ProjectAdapter:
 
             self.project.save()
             return {'success': True, 'character': self._character_to_dict(character)}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def update_settings(self, settings: Dict[str, Any]) -> Dict[str, Any]:
+        """更新项目设置"""
+        if not self.project:
+            return {'success': False, 'error': 'Project not loaded'}
+
+        try:
+            # 更新项目设置字段
+            for key, value in settings.items():
+                if hasattr(self.project.project_setting, key):
+                    setattr(self.project.project_setting, key, value)
+                else:
+                    # 忽略未知字段
+                    print(f"Warning: Unknown setting field '{key}' ignored")
+
+            # 如果voice相关设置发生变化，更新voice_manager路径
+            voice_related_keys = ['voice_lib_folder_path', 'design_model_path', 'clone_model_path', 'use_flash_attention']
+            if any(key in settings for key in voice_related_keys):
+                self.project.voice_manager.voice_lib_folder_path = self.project.project_setting.voice_lib_folder_path
+                self.project.voice_manager.model_manager = self.project.voice_manager.model_manager.__class__(
+                    self.project.project_setting.design_model_path,
+                    self.project.project_setting.clone_model_path,
+                    self.project.project_setting.use_flash_attention
+                )
+
+            # 保存项目
+            self.project.save()
+            return {'success': True, 'message': 'Settings updated successfully'}
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
