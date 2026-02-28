@@ -17,13 +17,17 @@ function CharacterEditModal({ character, projectId, onClose, onSaved }) {
     const [name, setName] = useState(character?.name || '')
     const [description, setDescription] = useState(character?.description || '')
     const [requiresTts, setRequiresTts] = useState(character?.requires_tts ?? true)
-    const [voiceName, setVoiceName] = useState(character?.voice_name || '')
+    const [voiceName, setVoiceName] = useState(character?.voice_name || character?.name || '')
     const [saving, setSaving] = useState(false)
     const [generatingDesc, setGeneratingDesc] = useState(false)
 
     const handleSave = async () => {
         if (!name.trim()) {
             addToast('请输入角色名称', 'error')
+            return
+        }
+        if (requiresTts && !voiceName.trim()) {
+            addToast('请为TTS语音合成输入语音名称', 'error')
             return
         }
         try {
@@ -107,7 +111,7 @@ function CharacterEditModal({ character, projectId, onClose, onSaved }) {
                                 onClick={handleGenerateDescription}
                                 disabled={generatingDesc}
                             >
-                                {generatingDesc ? '🔄 生成中...' : '🤖 AI生成角色描述'}
+                                {generatingDesc ? '🔄 生成中...' : '🧠 AI生成角色描述'}
                             </button>
                         )}
                     </div>
@@ -119,20 +123,22 @@ function CharacterEditModal({ character, projectId, onClose, onSaved }) {
                                 checked={requiresTts}
                                 onChange={e => setRequiresTts(e.target.checked)}
                             />
-                            <span>使用TTS语音合成</span>
+                            <span>需要语音设计</span>
                         </label>
                     </div>
 
-                    <div className="form-group">
-                        <label className="form-label">语音名称</label>
-                        <input
-                            className="input"
-                            type="text"
-                            placeholder="voice_name"
-                            value={voiceName}
-                            onChange={e => setVoiceName(e.target.value)}
-                        />
-                    </div>
+                    {requiresTts && (
+                        <div className="form-group">
+                            <label className="form-label">语音名称 *</label>
+                            <input
+                                className="input"
+                                type="text"
+                                placeholder={"请输入语音名称"}
+                                value={voiceName}
+                                onChange={e => setVoiceName(e.target.value)}
+                            />
+                        </div>
+                    )}
                 </div>
                 <div className="modal-footer">
                     <button className="btn btn-ghost" onClick={onClose}>取消</button>
@@ -154,10 +160,13 @@ export default function CharacterExtract({ projectId }) {
     const [extracting, setExtracting] = useState(false)
     const [editChar, setEditChar] = useState(undefined) // undefined=closed, null=new, object=edit
     const [showEditModal, setShowEditModal] = useState(false)
+    const [currentPage, setCurrentPage] = useState(1)
+    const segmentsPerPage = 50
 
     const fetchData = useCallback(async () => {
         try {
             setLoading(true)
+            setCurrentPage(1)
             const [segRes, charRes] = await Promise.all([
                 getSegments(projectId),
                 getCharacters(projectId),
@@ -227,26 +236,109 @@ export default function CharacterExtract({ projectId }) {
                         <span className="card-title">📄 文本处理结果</span>
                         <span className="text-xs text-muted">{segments.length} 个片段</span>
                     </div>
-                    <div style={{ maxHeight: 'calc(100vh - 280px)', overflowY: 'auto' }}>
-                        {segments.map((seg, idx) => {
-                            const isPlaceholder = seg.tag === 'PLACEHOLDER'
-                            const isDefault = seg.tag === 'DEFAULT'
-                            const tagClass = isPlaceholder ? 'tag-placeholder' : isDefault ? 'tag-default' : 'tag-quote'
+                    <div style={{ maxHeight: 'calc(100vh - 330px)', overflowY: 'auto' }}>
+                        {(() => {
+                            // 计算分页
+                            const startIdx = (currentPage - 1) * segmentsPerPage
+                            const endIdx = startIdx + segmentsPerPage
+                            const paginatedSegments = segments.slice(startIdx, endIdx)
 
-                            if (isPlaceholder && (seg.content === '\n' || seg.content.trim() === '')) {
-                                return null // hide empty placeholders
+                            // 分组渲染segments，PLACEHOLDER不换行
+                            const rows = []
+                            let currentRow = []
+                            let rowKey = 0
+
+                            paginatedSegments.forEach((seg, pageIdx) => {
+                                const actualIdx = startIdx + pageIdx
+                                const isPlaceholder = seg.tag === 'PLACEHOLDER'
+
+                                // 跳过空的PLACEHOLDER
+                                if (isPlaceholder && (seg.content === '\n' || seg.content.trim() === '')) {
+                                    return
+                                }
+
+                                // 如果是PLACEHOLDER且不是换行符，添加到当前行
+                                if (isPlaceholder) {
+                                    currentRow.push({ seg, idx: actualIdx })
+                                } else {
+                                    // 如果不是PLACEHOLDER，先提交当前行（如果有）
+                                    if (currentRow.length > 0) {
+                                        rows.push({ items: currentRow, key: rowKey++ })
+                                        currentRow = []
+                                    }
+                                    // 当前segment作为新行
+                                    rows.push({ items: [{ seg, idx: actualIdx }], key: rowKey++ })
+                                }
+                            })
+
+                            // 处理最后一行
+                            if (currentRow.length > 0) {
+                                rows.push({ items: currentRow, key: rowKey++ })
                             }
 
-                            return (
-                                <div key={idx} className={`segment-block ${tagClass}`}>
-                                    <span style={{ opacity: 0.4, fontSize: 'var(--font-size-xs)', marginRight: 8 }}>
-                                        #{idx}
-                                    </span>
-                                    {seg.content}
-                                </div>
-                            )
-                        })}
+                            return rows.map(row => {
+                                // 判断这一行是否只包含PLACEHOLDER
+                                const isPlaceholderRow = row.items.every(item => item.seg.tag === 'PLACEHOLDER')
+
+                                return (
+                                    <div key={row.key} className="segment-row" style={{
+                                        display: 'flex',
+                                        flexWrap: 'wrap',
+                                        alignItems: 'flex-start',
+                                        marginBottom: 'var(--space-2)'
+                                    }}>
+                                        {row.items.map(({ seg, idx }) => {
+                                            const isPlaceholder = seg.tag === 'PLACEHOLDER'
+                                            const isDefault = seg.tag === 'DEFAULT'
+                                            const tagClass = isPlaceholder ? 'tag-placeholder' : isDefault ? 'tag-default' : 'tag-quote'
+
+                                            return (
+                                                <div key={idx} className={`segment-block ${tagClass}`} style={{
+                                                    display: isPlaceholderRow ? 'inline-block' : 'block',
+                                                    marginBottom: 0,
+                                                    marginRight: isPlaceholderRow && isPlaceholder ? 0 : 'var(--space-2)'
+                                                }}>
+                                                    <span style={{ opacity: 0.4, fontSize: 'var(--font-size-xs)', marginRight: 8 }}>
+                                                        #{idx}
+                                                    </span>
+                                                    {seg.content}
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                )
+                            })
+                        })()}
                     </div>
+                    {segments.length > segmentsPerPage && (
+                        <div style={{ 
+                            display: 'flex', 
+                            justifyContent: 'center', 
+                            alignItems: 'center', 
+                            gap: 'var(--space-2)',
+                            padding: 'var(--space-3)',
+                            borderTop: '1px solid var(--border-color)',
+                            marginTop: 'var(--space-2)'
+                        }}>
+                            <button 
+                                className="btn btn-ghost btn-sm"
+                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                disabled={currentPage === 1}
+                            >
+                                ← 上一页
+                            </button>
+                            <span style={{ color: 'var(--text-secondary)' }}>
+                                {currentPage} / {Math.ceil(segments.length / segmentsPerPage)}
+                            </span>
+                            <button 
+                                className="btn btn-ghost btn-sm"
+                                onClick={() => setCurrentPage(p => Math.min(Math.ceil(segments.length / segmentsPerPage), p + 1))}
+                                disabled={currentPage === Math.ceil(segments.length / segmentsPerPage)}
+                            >
+                                下一页 →
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 {/* Right: Character List */}
@@ -256,15 +348,15 @@ export default function CharacterExtract({ projectId }) {
                     </div>
 
                     <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-4)' }}>
-                        <button className="btn btn-secondary btn-sm" onClick={openNewChar}>
-                            ＋ 新建角色
-                        </button>
                         <button
                             className="btn btn-primary btn-sm"
                             onClick={handleExtract}
                             disabled={extracting}
                         >
-                            {extracting ? '🔄 提取中...' : '🤖 AI角色提取'}
+                            {extracting ? '🔄 提取中...' : '🧠 AI角色提取'}
+                        </button>
+                        <button className="btn btn-secondary btn-sm" onClick={openNewChar}>
+                            ＋ 新建角色
                         </button>
                     </div>
 
@@ -301,8 +393,8 @@ export default function CharacterExtract({ projectId }) {
                                         )}
                                     </div>
                                     <div className="character-meta" style={{ marginTop: 'var(--space-2)' }}>
-                                        <span>TTS: {char.requires_tts ? '✅' : '❌'}</span>
-                                        {char.voice_name && <span>语音: {char.voice_name}</span>}
+                                        <span>语音设计: {char.requires_tts ? '✅' : '❌'}</span>
+                                        {char.voice_name && <span>语音名称: {char.voice_name}</span>}
                                     </div>
                                 </div>
                             ))

@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from pydantic import ValidationError
 import os
 import sys
+import shutil
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '..', 'src'))
@@ -203,7 +204,6 @@ def delete_project(project_id):
             ).dict()), 404
 
         # TODO: 实现删除项目目录
-        import shutil
         workspace_path = os.environ.get('WORKSPACE_PATH', './workspace')
         project_path = os.path.join(workspace_path, 'projects', project_id)
 
