@@ -5,6 +5,7 @@ import {
     generateVoiceDesigns,
     updateVoiceDesign,
     generateReferenceAudio,
+    getReferenceAudioUrl,
 } from '../api.js'
 import { useToast } from '../App.jsx'
 
@@ -17,6 +18,9 @@ function VoiceEditModal({ design, projectId, onClose, onSaved }) {
     const [saving, setSaving] = useState(false)
     const [generatingRef, setGeneratingRef] = useState(false)
     const [generatingDesign, setGeneratingDesign] = useState(false)
+    const [isPlaying, setIsPlaying] = useState(false)
+    const [audioError, setAudioError] = useState(null)
+    const audioRef = React.useRef(null)
     const hasRefAudio = design?.has_reference_audio
 
     const handleSave = async () => {
@@ -50,6 +54,39 @@ function VoiceEditModal({ design, projectId, onClose, onSaved }) {
             setGeneratingRef(false)
         }
     }
+
+    const handlePlayRefAudio = () => {
+        try {
+            if (audioRef.current) {
+                if (isPlaying) {
+                    audioRef.current.pause()
+                    setIsPlaying(false)
+                } else {
+                    const audioUrl = getReferenceAudioUrl(projectId, voiceName)
+                    if (audioRef.current.src !== audioUrl) {
+                        audioRef.current.src = audioUrl
+                    }
+                    audioRef.current.play().then(() => {
+                        setIsPlaying(true)
+                    }).catch(err => {
+                        setAudioError('播放失败: ' + err.message)
+                        addToast('播放音频失败: ' + err.message, 'error')
+                    })
+                }
+            }
+        } catch (err) {
+            setAudioError('播放失败: ' + err.message)
+            addToast('播放音频失败: ' + err.message, 'error')
+        }
+    }
+
+    React.useEffect(() => {
+        return () => {
+            if (audioRef.current) {
+                audioRef.current.pause()
+            }
+        }
+    }, [])
 
     return (
         <div className="modal-overlay" onClick={onClose}>
@@ -101,7 +138,13 @@ function VoiceEditModal({ design, projectId, onClose, onSaved }) {
                                 {hasRefAudio ? '已生成' : '未生成'}
                             </span>
                             {hasRefAudio && (
-                                <button className="btn btn-ghost btn-sm">▶ 播放</button>
+                                <button
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={handlePlayRefAudio}
+                                    disabled={generatingRef}
+                                >
+                                    {isPlaying ? '⏸ 暂停' : '▶ 播放'}
+                                </button>
                             )}
                             <button
                                 className="btn btn-secondary btn-sm"
@@ -120,6 +163,17 @@ function VoiceEditModal({ design, projectId, onClose, onSaved }) {
                     </button>
                 </div>
             </div>
+            {/* Hidden audio element for playing reference audio */}
+            <audio
+                ref={audioRef}
+                onEnded={() => setIsPlaying(false)}
+                onPause={() => setIsPlaying(false)}
+                onError={(e) => {
+                    setAudioError('音频播放错误')
+                    setIsPlaying(false)
+                }}
+                style={{ display: 'none' }}
+            />
         </div>
     )
 }
@@ -132,6 +186,8 @@ export default function VoiceDesign({ projectId }) {
     const [loading, setLoading] = useState(true)
     const [generating, setGenerating] = useState(false)
     const [editDesign, setEditDesign] = useState(null)
+    const [playingAudio, setPlayingAudio] = useState(null)
+    const audioRef = React.useRef(null)
 
     // Map character name → character
     const charMap = {}
@@ -181,6 +237,45 @@ export default function VoiceDesign({ projectId }) {
             addToast('生成参考音频失败: ' + err.message, 'error')
         }
     }
+
+    const handlePlayAudio = (voiceName) => {
+        try {
+            if (playingAudio === voiceName) {
+                // Stop playing
+                if (audioRef.current) {
+                    audioRef.current.pause()
+                }
+                setPlayingAudio(null)
+            } else {
+                // Stop any currently playing audio
+                if (audioRef.current) {
+                    audioRef.current.pause()
+                }
+
+                const audioUrl = getReferenceAudioUrl(projectId, voiceName)
+                if (audioRef.current) {
+                    audioRef.current.src = audioUrl
+                    audioRef.current.play().then(() => {
+                        setPlayingAudio(voiceName)
+                    }).catch(err => {
+                        addToast('播放音频失败: ' + err.message, 'error')
+                        setPlayingAudio(null)
+                    })
+                }
+            }
+        } catch (err) {
+            addToast('播放音频失败: ' + err.message, 'error')
+            setPlayingAudio(null)
+        }
+    }
+
+    React.useEffect(() => {
+        return () => {
+            if (audioRef.current) {
+                audioRef.current.pause()
+            }
+        }
+    }, [])
 
     // Build combined list: character + voice design
     const combinedList = characters.map(char => {
@@ -261,7 +356,12 @@ export default function VoiceDesign({ projectId }) {
                                                         <span className={`status-dot ${design.has_reference_audio ? 'generated' : 'not-generated'}`} />
                                                         <span>{design.has_reference_audio ? '参考音频已生成' : '参考音频未生成'}</span>
                                                         {design.has_reference_audio && (
-                                                            <button className="btn btn-ghost btn-sm">▶ 播放</button>
+                                                            <button
+                                                                className="btn btn-ghost btn-sm"
+                                                                onClick={() => handlePlayAudio(design.name)}
+                                                            >
+                                                                {playingAudio === design.name ? '⏸ 暂停' : '▶ 播放'}
+                                                            </button>
                                                         )}
                                                     </div>
                                                 </div>
@@ -285,6 +385,18 @@ export default function VoiceDesign({ projectId }) {
                     </table>
                 )}
             </div>
+
+            {/* Hidden audio element for playing reference audio */}
+            <audio
+                ref={audioRef}
+                onEnded={() => setPlayingAudio(null)}
+                onPause={() => setPlayingAudio(null)}
+                onError={() => {
+                    addToast('音频播放失败', 'error')
+                    setPlayingAudio(null)
+                }}
+                style={{ display: 'none' }}
+            />
 
             {editDesign && (
                 <VoiceEditModal

@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_file
 import os
 import sys
 import time
@@ -182,6 +182,73 @@ def regenerate_segment(project_id, segment_index):
             message=f'Segment {segment_index} regeneration started (feature not fully implemented yet)',
             data={'segment_index': segment_index}
         ).dict())
+
+    except Exception as e:
+        return jsonify(ErrorResponse(
+            error=str(e),
+            error_type=e.__class__.__name__
+        ).dict()), 500
+
+
+@audio_bp.route('/segments/<int:segment_index>/audio', methods=['GET'])
+def get_segment_audio(project_id, segment_index):
+    """获取片段音频文件"""
+    try:
+        adapter = ProjectAdapter(project_id)
+        project_info = adapter.get_project_info()
+
+        if not project_info.get('exists'):
+            return jsonify(ErrorResponse(
+                error=f'Project {project_id} not found'
+            ).dict()), 404
+
+        segments = adapter.get_text_segments()
+        if segment_index < 0 or segment_index >= len(segments):
+            return jsonify(ErrorResponse(
+                error=f'Segment index {segment_index} out of range'
+            ).dict()), 404
+
+        segment = segments[segment_index]
+        if not segment.get('has_audio'):
+            return jsonify(ErrorResponse(
+                error=f'Segment {segment_index} has no audio generated'
+            ).dict()), 404
+
+        # TODO: 获取音频文件路径 - 需要从project_adapter或project对象中获取
+        # 假设音频文件存储在workspace/projects/{project_id}/audio_segments/{segment_index}.wav
+        workspace_path = os.environ.get('WORKSPACE_PATH', './workspace')
+        audio_file_path = os.path.join(
+            workspace_path,
+            'projects',
+            project_id,
+            'audio_segments',
+            f'{segment_index}.wav'
+        )
+
+        if not os.path.exists(audio_file_path):
+            # 尝试其他可能的路径
+            # 检查是否在project的audio文件夹中
+            alt_path = os.path.join(
+                workspace_path,
+                'projects',
+                project_id,
+                'audio',
+                f'{segment_index}.wav'
+            )
+            if os.path.exists(alt_path):
+                audio_file_path = alt_path
+            else:
+                return jsonify(ErrorResponse(
+                    error=f'Audio file not found for segment {segment_index}'
+                ).dict()), 404
+
+        # 发送音频文件
+        return send_file(
+            audio_file_path,
+            as_attachment=False,
+            download_name=f'segment_{segment_index}_audio.wav',
+            mimetype='audio/wav'
+        )
 
     except Exception as e:
         return jsonify(ErrorResponse(

@@ -147,6 +147,10 @@ export async function generateReferenceAudio(projectId, characterName = null) {
     });
 }
 
+export function getReferenceAudioUrl(projectId, voiceName) {
+    return `/api/projects/${projectId}/voice/reference-audio/${encodeURIComponent(voiceName)}`;
+}
+
 // ===== Audio =====
 export async function generateAudio(projectId) {
     return request(`/projects/${projectId}/audio/generate`, {
@@ -188,6 +192,10 @@ export async function getOutputStatus(projectId) {
 
 export function getDownloadUrl(projectId) {
     return `${API_BASE}/projects/${projectId}/output/download`;
+}
+
+export function getSegmentAudioUrl(projectId, segmentIndex) {
+    return `${API_BASE}/projects/${projectId}/audio/segments/${segmentIndex}/audio`;
 }
 
 // ===== Project Settings =====

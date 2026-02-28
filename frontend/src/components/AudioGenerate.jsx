@@ -8,6 +8,7 @@ import {
     renderAudio,
     getOutputStatus,
     getDownloadUrl,
+    getSegmentAudioUrl,
 } from '../api.js'
 import { useToast } from '../App.jsx'
 
@@ -15,6 +16,8 @@ import { useToast } from '../App.jsx'
 function SegmentDetailModal({ segment, projectId, onClose, onRegenerated }) {
     const addToast = useToast()
     const [regenerating, setRegenerating] = useState(false)
+    const [isPlaying, setIsPlaying] = useState(false)
+    const audioRef = React.useRef(null)
 
     const handleRegenerate = async () => {
         try {
@@ -28,6 +31,39 @@ function SegmentDetailModal({ segment, projectId, onClose, onRegenerated }) {
             setRegenerating(false)
         }
     }
+
+    const handlePlayAudio = () => {
+        try {
+            if (audioRef.current) {
+                if (isPlaying) {
+                    audioRef.current.pause()
+                    setIsPlaying(false)
+                } else {
+                    const audioUrl = getSegmentAudioUrl(projectId, segment.index)
+                    if (audioRef.current.src !== audioUrl) {
+                        audioRef.current.src = audioUrl
+                    }
+                    audioRef.current.play().then(() => {
+                        setIsPlaying(true)
+                    }).catch(err => {
+                        addToast('播放音频失败: ' + err.message, 'error')
+                        setIsPlaying(false)
+                    })
+                }
+            }
+        } catch (err) {
+            addToast('播放音频失败: ' + err.message, 'error')
+            setIsPlaying(false)
+        }
+    }
+
+    React.useEffect(() => {
+        return () => {
+            if (audioRef.current) {
+                audioRef.current.pause()
+            }
+        }
+    }, [])
 
     return (
         <div className="modal-overlay" onClick={onClose}>
@@ -66,7 +102,13 @@ function SegmentDetailModal({ segment, projectId, onClose, onRegenerated }) {
 
                     <div style={{ display: 'flex', gap: 'var(--space-3)', marginTop: 'var(--space-4)' }}>
                         {segment.has_audio && (
-                            <button className="btn btn-secondary btn-sm">▶ 播放音频</button>
+                            <button
+                                className="btn btn-secondary btn-sm"
+                                onClick={handlePlayAudio}
+                                disabled={regenerating}
+                            >
+                                {isPlaying ? '⏸ 暂停' : '▶ 播放音频'}
+                            </button>
                         )}
                         <button
                             className="btn btn-secondary btn-sm"
@@ -81,6 +123,17 @@ function SegmentDetailModal({ segment, projectId, onClose, onRegenerated }) {
                     <button className="btn btn-ghost" onClick={onClose}>关闭</button>
                 </div>
             </div>
+            {/* Hidden audio element for playing segment audio */}
+            <audio
+                ref={audioRef}
+                onEnded={() => setIsPlaying(false)}
+                onPause={() => setIsPlaying(false)}
+                onError={() => {
+                    addToast('音频播放失败', 'error')
+                    setIsPlaying(false)
+                }}
+                style={{ display: 'none' }}
+            />
         </div>
     )
 }
@@ -133,7 +186,9 @@ export default function AudioGenerate({ projectId }) {
     const [selectedSegment, setSelectedSegment] = useState(null)
     const [showRenderComplete, setShowRenderComplete] = useState(false)
     const [outputStatus, setOutputStatus] = useState(null)
+    const [playingSegment, setPlayingSegment] = useState(null)
     const pollRef = useRef(null)
+    const audioRef = useRef(null)
 
     const fetchData = useCallback(async () => {
         try {
@@ -150,6 +205,45 @@ export default function AudioGenerate({ projectId }) {
             setLoading(false)
         }
     }, [projectId])
+
+    const handlePlaySegmentAudio = (segmentIndex) => {
+        try {
+            if (playingSegment === segmentIndex) {
+                // Stop playing
+                if (audioRef.current) {
+                    audioRef.current.pause()
+                }
+                setPlayingSegment(null)
+            } else {
+                // Stop any currently playing audio
+                if (audioRef.current) {
+                    audioRef.current.pause()
+                }
+
+                const audioUrl = getSegmentAudioUrl(projectId, segmentIndex)
+                if (audioRef.current) {
+                    audioRef.current.src = audioUrl
+                    audioRef.current.play().then(() => {
+                        setPlayingSegment(segmentIndex)
+                    }).catch(err => {
+                        addToast('播放音频失败: ' + err.message, 'error')
+                        setPlayingSegment(null)
+                    })
+                }
+            }
+        } catch (err) {
+            addToast('播放音频失败: ' + err.message, 'error')
+            setPlayingSegment(null)
+        }
+    }
+
+    React.useEffect(() => {
+        return () => {
+            if (audioRef.current) {
+                audioRef.current.pause()
+            }
+        }
+    }, [])
 
     useEffect(() => {
         fetchData()
@@ -320,8 +414,14 @@ export default function AudioGenerate({ projectId }) {
                                 </span>
                                 <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
                                     {isGenerated && (
-                                        <button className="btn btn-ghost btn-sm" onClick={e => { e.stopPropagation() }}>
-                                            ▶
+                                        <button
+                                            className="btn btn-ghost btn-sm"
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                handlePlaySegmentAudio(seg.index)
+                                            }}
+                                        >
+                                            {playingSegment === seg.index ? '⏸' : '▶'}
                                         </button>
                                     )}
                                     <button
@@ -377,6 +477,18 @@ export default function AudioGenerate({ projectId }) {
                     onClose={() => setShowRenderComplete(false)}
                 />
             )}
+
+            {/* Hidden audio element for playing segment audio in list */}
+            <audio
+                ref={audioRef}
+                onEnded={() => setPlayingSegment(null)}
+                onPause={() => setPlayingSegment(null)}
+                onError={() => {
+                    addToast('音频播放失败', 'error')
+                    setPlayingSegment(null)
+                }}
+                style={{ display: 'none' }}
+            />
         </>
     )
 }
