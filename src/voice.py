@@ -35,9 +35,10 @@ class VoiceDesign:
 """
 
         try:
+            print(f"生成声音设计 {voice_name} 的TTS指令中...")
             # 调用LLM
             tts_instruction = single_llm_request(prompt=prompt).strip()
-
+            
             return cls(
                 name=voice_name,
                 tts_instruction=tts_instruction,
@@ -60,9 +61,12 @@ class VoiceManager:
         )
     
     def add_voice_design(self, voice_name: str, tts_instruction: str):
-        if self.get_voice_design(voice_name):
-            return False
-        self.voice_designs.append(VoiceDesign(voice_name, tts_instruction))
+        voice_design = self.get_voice_design(voice_name)
+        if voice_design:
+            voice_design.tts_instruction = tts_instruction
+            voice_design.reference_audio_path = None # the file still exists, but it means it's invalid
+        else:
+            self.voice_designs.append(VoiceDesign(voice_name, tts_instruction))
         return True
     
     def create_from_character_description(self, voice_name: str, character_description: str):

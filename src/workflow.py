@@ -1,5 +1,6 @@
 import os
 import json
+import concurrent.futures
 from dataclasses import dataclass, asdict
 from .character import CharacterManager, Character
 from .text import TextManager, TaggedTextSegment
@@ -231,8 +232,32 @@ class Project:
     def generate_voice_design(self):
         character_voice_names_and_descriptions = self.get_character_voice_names_and_descriptions()
         assert character_voice_names_and_descriptions, "未找到任何需要TTS的人物，先设置需要TTS的人物"
-        for voice_name, description in character_voice_names_and_descriptions.items():
-            self.voice_manager.create_from_character_description(voice_name, description)
+
+        # 使用线程池并发执行
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            # 提交所有任务
+            future_to_voice_name = {}
+            for voice_name, description in character_voice_names_and_descriptions.items():
+                future = executor.submit(
+                    self.voice_manager.create_from_character_description,
+                    voice_name,
+                    description
+                )
+                future_to_voice_name[future] = voice_name
+
+            # 等待所有任务完成，收集结果
+            results = []
+            for future in concurrent.futures.as_completed(future_to_voice_name):
+                voice_name = future_to_voice_name[future]
+                try:
+                    result = future.result()
+                    results.append((voice_name, result))
+                except Exception as e:
+                    print(f"生成语音设计失败 (人物: {voice_name}): {e}")
+
+            # 统计结果
+            success_count = sum(1 for _, result in results if result)
+            print(f"语音设计生成完成: {success_count}/{len(results)} 成功")
 
     def generate_reference_audio(self, character_name: str = None):
         if character_name:
