@@ -24,6 +24,8 @@ export default function DialogueAssign({ projectId }) {
     const [statistics, setStatistics] = useState({})
     const [loading, setLoading] = useState(true)
     const [allocating, setAllocating] = useState(false)
+    const [currentPage, setCurrentPage] = useState(1)
+    const segmentsPerPage = 50
 
     // Popover state
     const [popover, setPopover] = useState(null) // { segmentIndex, x, y }
@@ -38,6 +40,7 @@ export default function DialogueAssign({ projectId }) {
     const fetchData = useCallback(async () => {
         try {
             setLoading(true)
+            setCurrentPage(1)
             const [diagRes, charRes] = await Promise.all([
                 getDialogues(projectId),
                 getCharacters(projectId),
@@ -134,57 +137,94 @@ export default function DialogueAssign({ projectId }) {
                         {statistics.allocated_quotes || 0}/{statistics.total_quotes || 0} 已分配
                     </span>
                 </div>
-                <div style={{ maxHeight: 'calc(100vh - 280px)', overflowY: 'auto', position: 'relative' }}>
-                    {segments.map((seg) => {
-                        const isPlaceholder = seg.tag === 'PLACEHOLDER'
-                        const isDefault = seg.tag === 'DEFAULT'
-                        const isQuote = seg.tag === 'QUOTE'
-                        const isAssigned = isQuote && seg.allocated_speaker
-                        const speakerColor = isAssigned ? charColorMap[seg.allocated_speaker] : null
+                <div style={{ maxHeight: 'calc(100vh - 280px)', overflowY: 'auto', position: 'relative'}}>
+                    {(() => {
+                        // 计算分页
+                        const startIdx = (currentPage - 1) * segmentsPerPage
+                        const endIdx = startIdx + segmentsPerPage
+                        const paginatedSegments = segments.slice(startIdx, endIdx)
 
-                        if (isPlaceholder && (seg.content === '\n' || seg.content.trim() === '')) {
-                            return null
-                        }
+                        return paginatedSegments.map((seg) => {
+                            const isPlaceholder = seg.tag === 'PLACEHOLDER'
+                            const isQuote = seg.tag === 'QUOTE'
+                            const isAssigned = isQuote && seg.allocated_speaker
+                            const speakerColor = isAssigned ? charColorMap[seg.allocated_speaker] : null
 
-                        let tagClass = 'tag-default'
-                        if (isPlaceholder) tagClass = 'tag-placeholder'
-                        else if (isQuote && isAssigned) tagClass = 'tag-quote assigned'
-                        else if (isQuote) tagClass = 'tag-quote unassigned'
+                            if (isPlaceholder && (seg.content === '\n' || seg.content.trim() === '')) {
+                                return null
+                            }
 
-                        return (
-                            <div
-                                key={seg.index}
-                                className={`segment-block ${tagClass}`}
-                                onClick={isQuote ? (e) => handleSegmentClick(seg, e) : undefined}
-                                style={{
-                                    cursor: isQuote ? 'pointer' : 'default',
-                                    ...(isAssigned && speakerColor
-                                        ? {
-                                            background: `${speakerColor}15`,
-                                            borderLeftColor: speakerColor,
-                                        }
-                                        : {}),
-                                }}
-                            >
-                                <span style={{ opacity: 0.3, fontSize: 'var(--font-size-xs)', marginRight: 8 }}>
-                                    #{seg.index}
-                                </span>
-                                {seg.content}
-                                {isAssigned && (
-                                    <span
-                                        className="segment-label"
-                                        style={{
-                                            background: `${speakerColor}30`,
-                                            color: speakerColor,
-                                        }}
-                                    >
-                                        {seg.allocated_speaker}
+                            let tagClass = 'tag-default'
+                            if (isPlaceholder) tagClass = 'tag-placeholder'
+                            else if (isQuote && isAssigned) tagClass = 'tag-quote assigned'
+                            else if (isQuote) tagClass = 'tag-quote unassigned'
+
+                            return (
+                                <div
+                                    key={seg.index}
+                                    className={`segment-block ${tagClass}`}
+                                    onClick={isQuote ? (e) => handleSegmentClick(seg, e) : undefined}
+                                    style={{
+                                        cursor: isQuote ? 'pointer' : 'default',
+                                        display: 'block',
+                                        width: 'fit-content',
+                                        ...(isAssigned && speakerColor
+                                            ? {
+                                                background: `${speakerColor}15`,
+                                                borderLeftColor: speakerColor,
+                                            }
+                                            : {}),
+                                    }}
+                                >
+                                    <span style={{ opacity: 0.3, fontSize: 'var(--font-size-xs)', marginRight: 8 }}>
+                                        #{seg.index}
                                     </span>
-                                )}
-                            </div>
-                        )
-                    })}
+                                    {seg.content}
+                                    {isAssigned && (
+                                        <span
+                                            className="segment-label"
+                                            style={{
+                                                background: `${speakerColor}30`,
+                                                color: speakerColor,
+                                            }}
+                                        >
+                                            {seg.allocated_speaker}
+                                        </span>
+                                    )}
+                                </div>
+                            )
+                        })
+                    })()}
                 </div>
+                {segments.length > segmentsPerPage && (
+                    <div style={{
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        gap: 'var(--space-2)',
+                        padding: 'var(--space-3)',
+                        borderTop: '1px solid var(--border-color)',
+                        marginTop: 'var(--space-2)'
+                    }}>
+                        <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                            disabled={currentPage === 1}
+                        >
+                            ← 上一页
+                        </button>
+                        <span style={{ color: 'var(--text-secondary)' }}>
+                            {currentPage} / {Math.ceil(segments.length / segmentsPerPage)}
+                        </span>
+                        <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => setCurrentPage(p => Math.min(Math.ceil(segments.length / segmentsPerPage), p + 1))}
+                            disabled={currentPage === Math.ceil(segments.length / segmentsPerPage)}
+                        >
+                            下一页 →
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* Popover for selecting speaker */}
