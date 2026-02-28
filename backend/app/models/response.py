@@ -82,3 +82,8 @@ class AddCharacterRequest(BaseModel):
 class UpdateDialogueRequest(BaseModel):
     """更新对话分配请求"""
     speaker: str
+
+
+class GenerateCharacterDescriptionRequest(BaseModel):
+    """生成角色描述请求"""
+    suggestion: Optional[str] = ""

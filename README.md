@@ -31,13 +31,7 @@ audiobookmaker/
 │   ├── run.py           # 启动脚本
 │   ├── requirements.txt # Python依赖
 │   └── workspace/       # 工作空间目录
-├── frontend/            # 前端Web界面（React）
-│   ├── src/
-│   │   ├── components/  # React组件
-│   │   ├── services/    # API服务
-│   │   └── App.tsx      # 主应用
-│   ├── package.json     # Node.js依赖
-│   └── vite.config.ts   # 构建配置
+├── frontend/            # 前端Web界面
 └── README.md            # 项目说明文档
 ```
 
@@ -251,6 +245,7 @@ python run.py
 | GET | `/<character_name>` | 获取单个角色信息 |
 | PUT | `/<character_name>` | 更新角色信息 |
 | DELETE | `/<character_name>` | 删除角色 |
+| POST | `/<character_name>/generate-description` | 生成角色描述 |
 
 #### 4. 对话分配 (`/api/projects/<project_id>/dialogues`)
 

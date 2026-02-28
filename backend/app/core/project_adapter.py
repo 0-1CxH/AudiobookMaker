@@ -181,6 +181,33 @@ class ProjectAdapter:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
+    def generate_character_description(self, character_name: str, suggestion: str = "") -> Dict[str, Any]:
+        """生成角色描述"""
+        if not self.project:
+            return {'success': False, 'error': 'Project not loaded'}
+
+        try:
+            # 获取项目的原始文本
+            if not self.project.raw_text:
+                return {'success': False, 'error': 'No text available in project'}
+
+            # 调用 generate_character_description 方法
+            description = self.project.generate_character_description(
+                name=character_name,
+                suggestion=suggestion
+            )
+
+            # 保存项目状态
+            self.project.save()
+
+            return {
+                'success': True,
+                'character_name': character_name,
+                'description': description
+            }
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
     def get_text_segments(self) -> List[Dict[str, Any]]:
         """获取所有文本片段"""
         if not self.project:

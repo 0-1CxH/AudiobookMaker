@@ -6,8 +6,66 @@ import sys
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '..', 'src'))
 
-from app.core.project_adapter import ProjectAdapter
-from app.models.response import StandardResponse, ErrorResponse, AddCharacterRequest, UpdateCharacterRequest
+@characters_bp.route('/<character_name>/generate-description', methods=['POST'])
+def generate_character_description(project_id, character_name):
+    """生成角色描述"""
+    try:
+        # 验证请求数据
+        data = request.get_json()
+        if not data:
+            return jsonify(ErrorResponse(
+                error='Request body is required'
+            ).dict()), 400
+
+        try:
+            req = GenerateCharacterDescriptionRequest(**data)
+        except ValidationError as e:
+            return jsonify(ErrorResponse(
+                error='Invalid request data',
+                details=e.errors()
+            ).dict()), 400
+
+        adapter = ProjectAdapter(project_id)
+        project_info = adapter.get_project_info()
+
+        if not project_info.get('exists'):
+            return jsonify(ErrorResponse(
+                error=f'Project {project_id} not found'
+            ).dict()), 404
+
+        # 检查角色是否已存在
+        characters = adapter.get_characters()
+        existing_characters = [c['name'] for c in characters]
+        if character_name not in existing_characters:
+            return jsonify(ErrorResponse(
+                error=f'Character {character_name} not found'
+            ).dict()), 404
+
+        # 生成角色描述
+        result = adapter.generate_character_description(
+            character_name=character_name,
+            suggestion=req.suggestion or ""
+        )
+
+        if not result.get('success'):
+            return jsonify(ErrorResponse(
+                error=result.get('error', 'Failed to generate character description')
+            ).dict()), 500
+
+        return jsonify(StandardResponse(
+            success=True,
+            message=f'Character description generated for {character_name}',
+            data={
+                'character_name': result.get('character_name'),
+                'description': result.get('description')
+            }
+        ).dict())
+
+    except Exception as e:
+        return jsonify(ErrorResponse(
+            error=str(e),
+            error_type=e.__class__.__name__
+        ).dict()), 500
 
 characters_bp = Blueprint('characters', __name__)
 
