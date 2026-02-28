@@ -19,7 +19,9 @@ function CharacterEditModal({ character, projectId, onClose, onSaved }) {
     const [requiresTts, setRequiresTts] = useState(character?.requires_tts ?? true)
     const [voiceName, setVoiceName] = useState(character?.voice_name || character?.name || '')
     const [saving, setSaving] = useState(false)
-    const [generatingDesc, setGeneratingDesc] = useState(false)
+    const [showSuggestionPopover, setShowSuggestionPopover] = useState(false)
+    const [suggestionInput, setSuggestionInput] = useState('')
+    const [submittingSuggestion, setSubmittingSuggestion] = useState(false)
 
     const handleSave = async () => {
         if (!name.trim()) {
@@ -57,23 +59,34 @@ function CharacterEditModal({ character, projectId, onClose, onSaved }) {
         }
     }
 
-    const handleGenerateDescription = async () => {
+    const handleShowSuggestionPopup = () => {
         if (isNew) {
             addToast('请先保存角色再生成描述', 'error')
             return
         }
+        setShowSuggestionPopover(true)
+    }
+
+    const handleSubmitSuggestion = async () => {
         try {
-            setGeneratingDesc(true)
-            const res = await generateCharacterDescription(projectId, character.name)
+            setSubmittingSuggestion(true)
+            const res = await generateCharacterDescription(projectId, character.name, suggestionInput.trim())
             if (res.data?.description) {
                 setDescription(res.data.description)
+                setShowSuggestionPopover(false)
+                setSuggestionInput('')
                 addToast('AI描述已生成', 'success')
             }
         } catch (err) {
             addToast('生成描述失败: ' + err.message, 'error')
         } finally {
-            setGeneratingDesc(false)
+            setSubmittingSuggestion(false)
         }
+    }
+
+    const handleCancelSuggestion = () => {
+        setShowSuggestionPopover(false)
+        setSuggestionInput('')
     }
 
     return (
@@ -106,13 +119,66 @@ function CharacterEditModal({ character, projectId, onClose, onSaved }) {
                             onChange={e => setDescription(e.target.value)}
                         />
                         {!isNew && (
-                            <button
-                                className="btn btn-secondary btn-sm mt-2"
-                                onClick={handleGenerateDescription}
-                                disabled={generatingDesc}
-                            >
-                                {generatingDesc ? '🔄 生成中...' : '🧠 AI生成角色描述'}
-                            </button>
+                            <div style={{ position: 'relative', display: 'inline-block' }}>
+                                <button
+                                    className="btn btn-secondary btn-sm mt-2"
+                                    onClick={handleShowSuggestionPopup}
+                                    disabled={showSuggestionPopover}
+                                >
+                                    {showSuggestionPopover ? '输入建议...' : '🧠 AI生成角色描述'}
+                                </button>
+                                {showSuggestionPopover && (
+                                    <div className="popover" style={{
+                                        position: 'absolute',
+                                        top: 0,
+                                        left: '100%',
+                                        marginLeft: '8px',
+                                        backgroundColor: 'var(--bg-secondary)',
+                                        border: '1px solid var(--border-color)',
+                                        borderRadius: 'var(--radius-md)',
+                                        padding: 'var(--space-3)',
+                                        boxShadow: 'var(--shadow-lg)',
+                                        zIndex: 1000,
+                                        minWidth: '300px'
+                                    }}>
+                                        <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                                            <input
+                                                type="text"
+                                                className="input"
+                                                placeholder="请输入改进建议..."
+                                                value={suggestionInput}
+                                                onChange={e => setSuggestionInput(e.target.value)}
+                                                style={{ flex: 1 }}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        handleSubmitSuggestion()
+                                                    }
+                                                }}
+                                            />
+                                            <button
+                                                className="btn btn-primary btn-sm"
+                                                onClick={handleSubmitSuggestion}
+                                                disabled={submittingSuggestion}
+                                            >
+                                                {submittingSuggestion ? '生成中...' : '>'}
+                                            </button>
+                                            <button
+                                                className="btn btn-ghost btn-sm"
+                                                onClick={handleCancelSuggestion}
+                                            >
+                                                ✕
+                                            </button>
+                                        </div>
+                                        <div style={{
+                                            fontSize: 'var(--font-size-xs)',
+                                            color: 'var(--text-muted)',
+                                            marginTop: 'var(--space-2)'
+                                        }}>
+                                            AI会根据建议生成更符合需求的角色描述
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         )}
                     </div>
 
