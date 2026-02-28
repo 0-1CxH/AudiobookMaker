@@ -27,10 +27,10 @@ export async function listProjects() {
     return request('/projects/');
 }
 
-export async function createProject(name, rawText, settings = null) {
+export async function createProject(name, rawText, project_setting = null) {
     return request('/projects/', {
         method: 'POST',
-        body: { name, raw_text: rawText, settings },
+        body: { name, raw_text: rawText, project_setting },
     });
 }
 

@@ -12,6 +12,19 @@ export default function ProjectList({ onSelectProject }) {
     // Create form state
     const [newName, setNewName] = useState('')
     const [newText, setNewText] = useState('')
+    const [showAdvancedSettings, setShowAdvancedSettings] = useState(false)
+    const [projectSettings, setProjectSettings] = useState({
+        split_format: 'line',
+        quote_format: 'auto',
+        context_window: 10,
+        default_duration: 0.2,
+        line_break_duration: 0.5,
+        sentence_margin_duration: 0.3,
+        voice_lib_folder_path: './workspace/voice_lib',
+        design_model_path: './workspace/design_model',
+        clone_model_path: './workspace/clone_model',
+        use_flash_attention: false,
+    })
 
     const fetchProjects = async () => {
         try {
@@ -29,6 +42,10 @@ export default function ProjectList({ onSelectProject }) {
         fetchProjects()
     }, [])
 
+    const handleSettingChange = (key, value) => {
+        setProjectSettings(prev => ({ ...prev, [key]: value }))
+    }
+
     const handleCreate = async () => {
         if (!newName.trim()) {
             addToast('请输入项目名称', 'error')
@@ -41,7 +58,7 @@ export default function ProjectList({ onSelectProject }) {
 
         try {
             setCreating(true)
-            const res = await createProject(newName.trim(), newText)
+            const res = await createProject(newName.trim(), newText, projectSettings)
             addToast('项目创建成功，正在处理文本...', 'success')
 
             // Auto-process text
@@ -73,24 +90,13 @@ export default function ProjectList({ onSelectProject }) {
         }
     }
 
-    const handleFileUpload = (e) => {
-        const file = e.target.files[0]
-        if (!file) return
-        const reader = new FileReader()
-        reader.onload = (event) => {
-            setNewText(event.target.result)
-            addToast(`已加载文件: ${file.name}`, 'info')
-        }
-        reader.readAsText(file)
-        e.target.value = ''
-    }
 
     return (
         <div className="page-container" style={{ maxWidth: 900, margin: '0 auto' }}>
             {/* Header */}
             <div className="page-header" style={{ paddingTop: 60 }}>
-                <h1>ABM - 音频书制作工具</h1>
-                <p>从文本自动生成高质量有声书</p>
+                <h1>AudiobookMaker 音频书制作智能工作流</h1>
+                <p>由LLM驱动的文字自动生成高质量有声书应用</p>
             </div>
 
             {/* Create Button */}
@@ -99,7 +105,7 @@ export default function ProjectList({ onSelectProject }) {
                     className="btn btn-primary btn-lg"
                     onClick={() => setShowCreate(!showCreate)}
                 >
-                    {showCreate ? '✕ 收起' : '＋ 创建新项目'}
+                    {showCreate ? '✕' : '＋'}
                 </button>
             </div>
 
@@ -113,7 +119,7 @@ export default function ProjectList({ onSelectProject }) {
                         <input
                             className="input"
                             type="text"
-                            placeholder="请输入项目名称（英文或拼音，无空格）"
+                            placeholder="请输入项目名称"
                             value={newName}
                             onChange={e => setNewName(e.target.value)}
                         />
@@ -132,15 +138,6 @@ export default function ProjectList({ onSelectProject }) {
                     </div>
 
                     <div style={{ display: 'flex', gap: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
-                        <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
-                            📁 上传文件
-                            <input
-                                type="file"
-                                accept=".txt,.md"
-                                onChange={handleFileUpload}
-                                style={{ display: 'none' }}
-                            />
-                        </label>
                         <button
                             className="btn btn-ghost"
                             onClick={() => setNewText('')}
@@ -148,6 +145,151 @@ export default function ProjectList({ onSelectProject }) {
                         >
                             清空文本
                         </button>
+                    </div>
+
+                    {/* Advanced Settings */}
+                    <div style={{ marginBottom: 'var(--space-4)' }}>
+                        <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+                            style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}
+                        >
+                            {showAdvancedSettings ? '▼' : '▶'} 高级设置
+                        </button>
+
+                        {showAdvancedSettings && (
+                            <div style={{
+                                marginTop: 'var(--space-3)',
+                                padding: 'var(--space-4)',
+                                background: 'var(--base-2)',
+                                borderRadius: 'var(--radius-lg)',
+                                border: '1px solid var(--border)'
+                            }}>
+                                {/* Text Processing Settings */}
+                                <div style={{ marginBottom: 'var(--space-4)' }}>
+                                    <h3 style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, marginBottom: 'var(--space-3)' }}>文本处理设置</h3>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 'var(--space-3)' }}>
+                                        <div className="form-group">
+                                            <label className="form-label">分割方式</label>
+                                            <select
+                                                className="select"
+                                                value={projectSettings.split_format}
+                                                onChange={e => handleSettingChange('split_format', e.target.value)}
+                                            >
+                                                <option value="line">按行分割</option>
+                                                <option value="sentence">按句子分割</option>
+                                            </select>
+                                        </div>
+                                        <div className="form-group">
+                                            <label className="form-label">引语检测</label>
+                                            <select
+                                                className="select"
+                                                value={projectSettings.quote_format}
+                                                onChange={e => handleSettingChange('quote_format', e.target.value)}
+                                            >
+                                                <option value="auto">自动检测</option>
+                                                <option value="manual">手动标记</option>
+                                            </select>
+                                        </div>
+                                        <div className="form-group">
+                                            <label className="form-label">上下文窗口大小</label>
+                                            <input
+                                                className="input"
+                                                type="number"
+                                                min={1}
+                                                max={50}
+                                                value={projectSettings.context_window}
+                                                onChange={e => handleSettingChange('context_window', parseInt(e.target.value) || 10)}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Audio Settings */}
+                                <div style={{ marginBottom: 'var(--space-4)' }}>
+                                    <h3 style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, marginBottom: 'var(--space-3)' }}>音频设置</h3>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 'var(--space-3)' }}>
+                                        <div className="form-group">
+                                            <label className="form-label">默认空白时长 (秒)</label>
+                                            <input
+                                                className="input"
+                                                type="number"
+                                                step="0.1"
+                                                min={0}
+                                                value={projectSettings.default_duration}
+                                                onChange={e => handleSettingChange('default_duration', parseFloat(e.target.value) || 0.2)}
+                                            />
+                                        </div>
+                                        <div className="form-group">
+                                            <label className="form-label">换行停顿时长 (秒)</label>
+                                            <input
+                                                className="input"
+                                                type="number"
+                                                step="0.1"
+                                                min={0}
+                                                value={projectSettings.line_break_duration}
+                                                onChange={e => handleSettingChange('line_break_duration', parseFloat(e.target.value) || 0.5)}
+                                            />
+                                        </div>
+                                        <div className="form-group">
+                                            <label className="form-label">句间停顿时长 (秒)</label>
+                                            <input
+                                                className="input"
+                                                type="number"
+                                                step="0.1"
+                                                min={0}
+                                                value={projectSettings.sentence_margin_duration}
+                                                onChange={e => handleSettingChange('sentence_margin_duration', parseFloat(e.target.value) || 0.3)}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Model Paths */}
+                                <div>
+                                    <h3 style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, marginBottom: 'var(--space-3)' }}>TTS模型路径</h3>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+                                        <div className="form-group">
+                                            <label className="form-label">声音库文件夹路径</label>
+                                            <input
+                                                className="input"
+                                                type="text"
+                                                value={projectSettings.voice_lib_folder_path}
+                                                onChange={e => handleSettingChange('voice_lib_folder_path', e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="form-group">
+                                            <label className="form-label">设计模型路径</label>
+                                            <input
+                                                className="input"
+                                                type="text"
+                                                value={projectSettings.design_model_path}
+                                                onChange={e => handleSettingChange('design_model_path', e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="form-group">
+                                            <label className="form-label">克隆模型路径</label>
+                                            <input
+                                                className="input"
+                                                type="text"
+                                                value={projectSettings.clone_model_path}
+                                                onChange={e => handleSettingChange('clone_model_path', e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="form-group">
+                                            <label className="checkbox-group">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={projectSettings.use_flash_attention}
+                                                    onChange={e => handleSettingChange('use_flash_attention', e.target.checked)}
+                                                />
+                                                <span>使用 Flash Attention 加速</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <div style={{ display: 'flex', gap: 'var(--space-3)', justifyContent: 'flex-end' }}>
