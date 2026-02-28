@@ -373,12 +373,47 @@ a:hover {
     margin: 0 auto;
 }
 
+.nav-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    margin-bottom: var(--space-3);
+}
+
+.nav-header-left {
+    flex: 0 0 auto;
+    display: flex;
+    justify-content: flex-start;
+}
+
+.nav-header-center {
+    flex: 1;
+    overflow: hidden;
+    text-align: center;
+}
+
+.nav-header-right {
+    flex: 0 0 auto;
+    display: flex;
+    justify-content: flex-end;
+}
+
 .nav-project-title {
     text-align: center;
     font-size: var(--font-size-lg);
     font-weight: 600;
     color: var(--text-primary);
-    margin-bottom: var(--space-3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.nav-controls-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
 }
 
 .nav-steps {
@@ -386,7 +421,6 @@ a:hover {
     align-items: center;
     justify-content: center;
     gap: var(--space-1);
-    margin-bottom: var(--space-3);
     flex-wrap: wrap;
 }
 
@@ -443,15 +477,12 @@ a:hover {
     margin: 0 var(--space-1);
 }
 
-.nav-actions {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-3);
-    flex-wrap: wrap;
+.nav-step-arrow {
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
+    margin: 0 var(--space-1);
 }
 
-/* ===== Modal / Dialog ===== */
 .modal-overlay {
     position: fixed;
     top: 0;

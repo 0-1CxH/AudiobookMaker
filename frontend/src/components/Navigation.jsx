@@ -38,39 +38,38 @@ export default function Navigation({ projectName, projectId, currentStep, onStep
         return ''
     }
 
+    const truncateProjectName = (name, maxLength = 35) => {
+        if (name.length > maxLength) {
+            return name.substring(0, maxLength) + '...'
+        }
+        return name
+    }
+
     return (
         <>
             <nav className="nav-bar">
                 <div className="nav-bar-inner">
-                    {/* Project Title */}
-                    <div className="nav-project-title">
-                        📖 项目: {projectName}
+                    {/* First Row: Back | Title | Save */}
+                    <div className="nav-header-row">
+                        <div className="nav-header-left">
+                            <button className="btn btn-ghost btn-sm" onClick={handleBack}>
+                                ↩ 返回项目列表
+                            </button>
+                        </div>
+                        <div className="nav-header-center">
+                            <div className="nav-project-title">
+                                《{truncateProjectName(projectName)}》
+                            </div>
+                        </div>
+                        <div className="nav-header-right">
+                            <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving}>
+                                {saving ? '保存中...' : '💾 保存项目'}
+                            </button>
+                        </div>
                     </div>
 
-                    {/* Step Indicators */}
-                    <div className="nav-steps">
-                        {STEPS.map((step, idx) => (
-                            <React.Fragment key={step.num}>
-                                <div
-                                    className={`nav-step ${getStepState(step.num)}`}
-                                    onClick={() => step.num >= 2 && onStepChange(step.num)}
-                                    style={{ cursor: step.num >= 2 ? 'pointer' : 'default' }}
-                                >
-                                    <span className="nav-step-icon">
-                                        {getStepState(step.num) === 'completed' ? '✓' : step.num}
-                                    </span>
-                                    <span className="nav-step-label">{step.label}</span>
-                                </div>
-                                {idx < STEPS.length - 1 && <span className="nav-step-arrow">→</span>}
-                            </React.Fragment>
-                        ))}
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="nav-actions">
-                        <button className="btn btn-secondary btn-sm" onClick={handleSave} disabled={saving}>
-                            {saving ? '保存中...' : '💾 保存项目'}
-                        </button>
+                    {/* Second Row: Navigation Steps + Controls Centered */}
+                    <div className="nav-controls-row">
                         <button
                             className="btn btn-secondary btn-sm"
                             onClick={() => onStepChange(Math.max(2, currentStep - 1))}
@@ -78,15 +77,38 @@ export default function Navigation({ projectName, projectId, currentStep, onStep
                         >
                             ◀ 上一步
                         </button>
+
+                        {/* Step Indicators */}
+                        <div className="nav-steps">
+                            {STEPS.map((step, idx) => (
+                                <React.Fragment key={step.num}>
+                                    <div
+                                        className={`nav-step ${getStepState(step.num)}`}
+                                        onClick={() => {
+                                            if (step.num === 1) {
+                                                handleBack()
+                                            } else if (step.num >= 2) {
+                                                onStepChange(step.num)
+                                            }
+                                        }}
+                                        style={{ cursor: step.num === 1 || step.num >= 2 ? 'pointer' : 'default' }}
+                                    >
+                                        <span className="nav-step-icon">
+                                            {getStepState(step.num) === 'completed' ? '✓' : step.num}
+                                        </span>
+                                        <span className="nav-step-label">{step.label}</span>
+                                    </div>
+                                    {idx < STEPS.length - 1 && <span className="nav-step-arrow">→</span>}
+                                </React.Fragment>
+                            ))}
+                        </div>
+
                         <button
-                            className="btn btn-primary btn-sm"
+                            className="btn btn-secondary btn-sm"
                             onClick={() => onStepChange(Math.min(5, currentStep + 1))}
                             disabled={currentStep >= 5}
                         >
                             下一步 ▶
-                        </button>
-                        <button className="btn btn-ghost btn-sm" onClick={handleBack}>
-                            ↩ 返回项目列表
                         </button>
                     </div>
                 </div>

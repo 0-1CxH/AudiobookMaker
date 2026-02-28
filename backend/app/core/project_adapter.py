@@ -48,6 +48,16 @@ class ProjectAdapter:
         else:
             # 项目不存在，将在需要时创建
             self.project = None
+    
+    def save_project(self):
+        """保存项目状态"""
+        if self.project:
+            try:
+                self.project.save()
+                print(f"Project {self.project_id} saved successfully")
+            except Exception as e:
+                print(f"Failed to save project {self.project_id}: {e}")
+                raise
 
     def create_project(self, raw_text: str = "", settings: Optional[Dict] = None) -> Dict[str, Any]:
         """创建新项目"""

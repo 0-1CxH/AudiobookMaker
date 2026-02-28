@@ -151,10 +151,6 @@ def update_project(project_id):
     """更新项目"""
     try:
         data = request.get_json()
-        if not data:
-            return jsonify(ErrorResponse(
-                error='Request body is required'
-            ).dict()), 400
 
         adapter = ProjectAdapter(project_id)
         project_info = adapter.get_project_info()
@@ -166,7 +162,7 @@ def update_project(project_id):
 
         # 支持更新项目设置
         project_setting = data.get('project_setting')
-
+        
         updated = False
 
         if project_setting is not None:
@@ -177,12 +173,9 @@ def update_project(project_id):
                     error=result.get('error', 'Failed to update settings')
                 ).dict()), 400
             updated = True
-
+        
         if not updated:
-            # 没有提供任何更新字段
-            return jsonify(ErrorResponse(
-                error='No update fields provided (supported: raw_text, project_setting)'
-            ).dict()), 400
+            adapter.save_project()
 
         return jsonify(StandardResponse(
             success=True,
