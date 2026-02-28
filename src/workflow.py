@@ -77,7 +77,8 @@ class Project:
                 TaggedTextSegment(content=seg['content'], tag=seg['tag'])
                 for seg in text_data.get('data', [])
             ]
-            project.text_manager.allocation_map = text_data.get('allocation_map', {})
+            _allocation_map = text_data.get('allocation_map', {})
+            project.text_manager.allocation_map = {int(k): v for k, v in _allocation_map.items()} # change keys to int
 
         # 恢复人物管理器
         characters_data = metadata.get('character_manager', {}).get('characters', [])
@@ -217,6 +218,8 @@ class Project:
     def generate_quote_allocation(self):
         character_names = self.get_character_names()
         assert character_names, "未找到任何人物，请先提取或添加人物"
+        if "默认" in character_names:
+            character_names.remove("默认")  # 默认人物不参与对话分配
         self.text_manager.allocate_quote_to_character(character_names, self.project_setting.context_window)
 
     def set_voice_design_tts_instruction(self, voice_name: str, instruction: str):

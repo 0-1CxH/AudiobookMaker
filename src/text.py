@@ -233,7 +233,8 @@ class TextManager:
     def set_speaker_tag(self, segment_index, speaker_tag):
         if self.data[segment_index].tag not in [self.DEFAULT_TAG, self.PLACEHOLDER_TAG]:
             self.data[segment_index].tag = speaker_tag
-    
+            self.allocation_map[segment_index] = speaker_tag
+     
     def remove_speaker_tags_by_name(self, name: str):
         for i, segment in enumerate(self.data):
             if segment.tag == name:
@@ -311,7 +312,6 @@ class TextManager:
 
                 # 只记录有确定角色分配的情况
                 if speaker in character_names:
-                    self.allocation_map[segment_index] = speaker
                     self.set_speaker_tag(segment_index, speaker)
                 elif speaker != "unknown":
                     print(f"警告：分配结果 '{speaker}' 不在有效人物列表中")
