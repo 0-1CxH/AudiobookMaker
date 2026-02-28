@@ -1,4 +1,5 @@
 import re
+import concurrent.futures
 from dataclasses import dataclass
 from .utils import single_llm_request
 
@@ -225,6 +226,9 @@ class TextManager:
                     context_text += self.data[idx].content
 
                 yield i, tagged_text_segment.content, context_text
+            else:
+                if tagged_text_segment.tag != self.PLACEHOLDER_TAG and tagged_text_segment.tag != self.DEFAULT_TAG:
+                    self.allocation_map[i] = tagged_text_segment.tag # recover allocation map
     
     def set_speaker_tag(self, segment_index, speaker_tag):
         if self.data[segment_index].tag not in [self.DEFAULT_TAG, self.PLACEHOLDER_TAG]:
@@ -235,20 +239,32 @@ class TextManager:
             if segment.tag == name:
                 self.data[i].tag = self.QUOTE_TAG
 
-    def allocate_quote_to_character(self, character_names: set, context_window: int):
+    def allocate_quote_to_character(self, character_names: set, context_window: int, max_workers: int = 10):
         """为所有引语分配说话人
 
         Args:
             character_names: 人物名字集合
             context_window: 上下文窗口大小
+            max_workers: 最大并行工作线程数，默认为10
         """
 
         self.allocation_map = {}
 
+        # 收集需要处理的所有引语任务
+        tasks = []
         for segment_index, quote, context_text in self.iterate_quote_and_context(context_window):
-            if segment_index in self.allocation_map:
-                continue  # 已经分配过了
-            print(f"正在处理引语索引 {segment_index}，内容：{quote}，上下文：{context_text}")
+            tasks.append((segment_index, quote, context_text))
+
+        if not tasks:
+            print("没有需要分配的引语")
+            return
+
+        print(f"开始并行处理 {len(tasks)} 个引语，使用最多 {max_workers} 个线程")
+
+        # 定义处理单个引语的函数
+        def process_quote(task):
+            segment_index, quote, context_text = task
+
             # 构造LLM提示词，判断谁在说这句引语
             prompt = f"""请分析以下引语及其上下文，判断这句话最有可能是由哪个角色说出的。
 
@@ -266,26 +282,40 @@ class TextManager:
 （2）如果这个引语不是一句人物说的话，而是名词列举或者修辞手法，请返回unknown。
 （3）如果内容不包含引语，请返回unknown。
 """
-
             try:
-                
                 response = single_llm_request(prompt=prompt)
                 speaker = response.strip()
+                return segment_index, speaker, None
+            except Exception as e:
+                return segment_index, None, str(e)
+
+        # 使用线程池并行处理
+        completed = 0
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # 提交所有任务
+            future_to_task = {executor.submit(process_quote, task): task for task in tasks}
+
+            # 处理完成的任务
+            for future in concurrent.futures.as_completed(future_to_task):
+                segment_index, speaker, error = future.result()
+                task = future_to_task[future]
+                _, quote, _ = task
+
+                completed += 1
+                if completed % 10 == 0 or completed == len(tasks):
+                    print(f"进度：[{completed} / {len(tasks)}]，当前处理引语索引 {segment_index}")
+
+                if error:
+                    print(f"处理索引 {segment_index} 的引语时出错：{error}")
+                    continue
 
                 # 只记录有确定角色分配的情况
                 if speaker in character_names:
                     self.allocation_map[segment_index] = speaker
+                    self.set_speaker_tag(segment_index, speaker)
                 elif speaker != "unknown":
                     print(f"警告：分配结果 '{speaker}' 不在有效人物列表中")
                 else:
-                    pass
-
-            except Exception as e:
-                print(f"处理索引 {segment_index} 的引语时出错：{e}")
-                continue
-        
-        for segment_index, speaker in self.allocation_map.items():
-            self.set_speaker_tag(segment_index, speaker)
-
+                    pass  # unknown 情况不记录
         
 
