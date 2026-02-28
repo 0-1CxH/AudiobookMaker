@@ -268,7 +268,7 @@ export default function DialogueAssign({ projectId }) {
                     onClick={handleAllocate}
                     disabled={allocating}
                 >
-                    {allocating ? '🔄 分配中...' : '🤖 AI对话分配'}
+                    {allocating ? '🔄 分配中...' : '🧠 AI对话分配'}
                 </button>
 
                 <div style={{ maxHeight: 'calc(100vh - 380px)', overflowY: 'auto' }}>

@@ -226,7 +226,7 @@ export default function VoiceDesign({ projectId }) {
                             onClick={handleGenerate}
                             disabled={generating}
                         >
-                            {generating ? '🔄 生成中...' : '🤖 AI语音设计'}
+                            {generating ? '🔄 生成中...' : '🧠 AI语音设计'}
                         </button>
                         <button
                             className="btn btn-secondary btn-sm"
@@ -258,20 +258,18 @@ export default function VoiceDesign({ projectId }) {
                                     <tr key={char.name} className={disabled ? 'disabled-row' : ''}>
                                         <td>
                                             <div className="font-semibold">{char.name}</div>
-                                            {disabled && (
-                                                <span className="text-xs text-muted">(不需要TTS)</span>
-                                            )}
+
                                         </td>
                                         <td>
                                             {disabled ? (
-                                                <span className="text-muted text-sm">该角色不使用语音合成</span>
+                                                <span className="text-muted text-sm">该角色不需要语音设计</span>
                                             ) : design ? (
                                                 <div>
                                                     <div className="text-sm" style={{ marginBottom: 4 }}>
                                                         <strong>语音名:</strong> {design.name}
                                                     </div>
                                                     <div className="tts-preview" style={{ whiteSpace: 'normal', maxWidth: 'none' }}>
-                                                        <strong>TTS指令:</strong>{' '}
+                                                        <strong>音色控制指令:</strong>{' '}
                                                         {design.tts_instruction
                                                             ? (design.tts_instruction.length > 80
                                                                 ? design.tts_instruction.substring(0, 80) + '...'
