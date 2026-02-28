@@ -6,6 +6,10 @@ import sys
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '..', 'src'))
 
+from app.core.project_adapter import ProjectAdapter
+from app.models.response import StandardResponse, ErrorResponse, AddCharacterRequest, UpdateCharacterRequest, GenerateCharacterDescriptionRequest
+characters_bp = Blueprint('characters', __name__)
+
 @characters_bp.route('/<character_name>/generate-description', methods=['POST'])
 def generate_character_description(project_id, character_name):
     """生成角色描述"""
@@ -66,8 +70,6 @@ def generate_character_description(project_id, character_name):
             error=str(e),
             error_type=e.__class__.__name__
         ).dict()), 500
-
-characters_bp = Blueprint('characters', __name__)
 
 
 @characters_bp.route('/', methods=['GET'])
