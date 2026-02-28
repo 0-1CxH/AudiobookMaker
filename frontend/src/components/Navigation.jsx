@@ -63,7 +63,7 @@ export default function Navigation({ projectName, projectId, currentStep, onStep
                         </div>
                         <div className="nav-header-right">
                             <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving}>
-                                {saving ? '保存中...' : '💾 保存项目'}
+                                {saving ? '保存中...' : '保存项目'}
                             </button>
                         </div>
                     </div>

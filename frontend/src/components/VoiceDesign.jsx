@@ -43,6 +43,7 @@ function VoiceEditModal({ design, projectId, onClose, onSaved }) {
             await generateReferenceAudio(projectId, voiceName)
             addToast('参考音频已生成', 'success')
             onSaved()
+            onClose()
         } catch (err) {
             addToast('生成参考音频失败: ' + err.message, 'error')
         } finally {
@@ -64,7 +65,7 @@ function VoiceEditModal({ design, projectId, onClose, onSaved }) {
                     </div>
 
                     <div className="form-group">
-                        <label className="form-label">TTS指令</label>
+                        <label className="form-label">音色控制指令</label>
                         <textarea
                             className="textarea"
                             rows={5}
@@ -72,26 +73,6 @@ function VoiceEditModal({ design, projectId, onClose, onSaved }) {
                             value={ttsInstruction}
                             onChange={e => setTtsInstruction(e.target.value)}
                         />
-                        <button
-                            className="btn btn-secondary btn-sm mt-2"
-                            disabled={generatingDesign}
-                            onClick={async () => {
-                                try {
-                                    setGeneratingDesign(true)
-                                    addToast('正在AI生成语音设计指令...', 'info')
-                                    // The generate-designs endpoint generates for all, so we just inform user
-                                    await generateVoiceDesigns(projectId)
-                                    addToast('语音设计指令已生成，请刷新查看', 'success')
-                                    onSaved()
-                                } catch (err) {
-                                    addToast('生成失败: ' + err.message, 'error')
-                                } finally {
-                                    setGeneratingDesign(false)
-                                }
-                            }}
-                        >
-                            {generatingDesign ? '🔄 生成中...' : '🤖 AI语音设计'}
-                        </button>
                     </div>
 
                     <div className="form-group">
@@ -294,7 +275,7 @@ export default function VoiceDesign({ projectId }) {
                                                 onClick={() => setEditDesign(design || { name: char.voice_name, tts_instruction: '', reference_text: '', has_reference_audio: false })}
                                                 disabled={disabled}
                                             >
-                                                ✏️ 编辑
+                                                编辑
                                             </button>
                                         </td>
                                     </tr>

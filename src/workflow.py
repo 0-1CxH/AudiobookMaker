@@ -57,19 +57,20 @@ class Project:
 
         if not os.path.exists(metadata_path):
             raise FileNotFoundError(f"项目元数据文件不存在: {metadata_path}")
-
-        # 创建空项目
-        project = cls(name, raw_text="")
-
+        
         # 加载元数据
         with open(metadata_path, 'r', encoding='utf-8') as f:
             metadata = json.load(f)
-
-        # 恢复ProjectSetting
-        project.project_setting = ProjectSetting(**metadata.get('project_setting', {}))
-
+  
         # 恢复原始文本
-        project.raw_text = metadata.get('raw_text', '')
+        raw_text = metadata.get('raw_text', '')
+        
+        # 恢复ProjectSetting
+        project_setting = ProjectSetting(**metadata.get('project_setting', {}))
+
+        # 创建空项目
+        project = cls(name, raw_text=raw_text, project_setting=project_setting)
+
 
         # 恢复文本管理器
         text_data = metadata.get('text_manager', {})

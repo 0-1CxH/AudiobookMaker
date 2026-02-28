@@ -333,6 +333,27 @@ class ProjectAdapter:
             })
         return designs
 
+    def generate_reference_audio(self, character_name: str = None) -> Dict[str, Any]:
+        """生成参考音频"""
+        if not self.project:
+            return {'success': False, 'error': 'Project not loaded'}
+
+        try:
+            self.project.generate_reference_audio(character_name)
+            self.project.save()
+
+            # 返回更新后的语音设计列表
+            designs = self.get_voice_designs()
+
+            return {
+                'success': True,
+                'message': f'Reference audio generated for {character_name or "all TTS characters"}',
+                'voice_designs': designs,
+                'character_name': character_name
+            }
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
     def generate_audio(self) -> Dict[str, Any]:
         """生成音频"""
         if not self.project:

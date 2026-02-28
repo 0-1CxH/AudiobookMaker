@@ -159,12 +159,21 @@ def generate_reference_audio(project_id):
                 error=f'Project {project_id} not found'
             ).dict()), 404
 
-        # TODO: 在ProjectAdapter中添加生成参考音频的方法
-        # 目前暂时返回成功
+        # 调用ProjectAdapter生成参考音频
+        result = adapter.generate_reference_audio(character_name)
+
+        if not result.get('success'):
+            return jsonify(ErrorResponse(
+                error=result.get('error', 'Failed to generate reference audio')
+            ).dict()), 500
+
         return jsonify(StandardResponse(
             success=True,
-            message='Reference audio generation started (feature not fully implemented yet)',
-            data={'character_name': character_name}
+            message=result.get('message', 'Reference audio generated successfully'),
+            data={
+                'voice_designs': result.get('voice_designs', []),
+                'character_name': result.get('character_name')
+            }
         ).dict())
 
     except Exception as e:

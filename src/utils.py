@@ -1,4 +1,5 @@
 import os
+import time
 import openai
 import json
 import re
@@ -83,12 +84,15 @@ class LocalQwen3TTSModelManager:
     def _load_model(self, model_path: str, model_type: str):
         """加载指定类型的模型"""
         if model_path:
+            start_time = time.time()
             model = Qwen3TTSModel.from_pretrained(
                 model_path,
                 device_map="cuda:0",
                 dtype=torch.bfloat16,
                 attn_implementation="flash_attention_2" if self._use_flash_attention else None,
             )
+            end_time = time.time()
+            print(f"{model_type} 模型 ({model_path}) 加载用时 {end_time - start_time:.2f} 秒")
 
             if model_type == "design":
                 self._design_model = model
@@ -134,12 +138,15 @@ class LocalQwen3TTSModelManager:
         return self._use_flash_attention
     
     def generate_voice_design(self, text: str, instruct: str):
+        start_time = time.time()
         wavs, sr = self.design_model.generate_voice_design(
             text=text,
             language="Chinese",
             instruct= instruct,
             do_sample=False,
         )
+        end_time = time.time()
+        print(f"生成语音设计用时 {end_time - start_time:.2f} 秒")
         return wavs, sr
     
     @functools.lru_cache(maxsize=128)
@@ -161,12 +168,15 @@ class LocalQwen3TTSModelManager:
     
     def generate_voice_clone(self, text: str, ref_audio_path: str, ref_text: str, instruct: str):
         voice_clone_prompt = self.create_clone_prompt(ref_audio_path, ref_text)
+        start_time = time.time()
         wavs, sr = self.clone_model.generate_voice_clone(
             text=text,
             language="Chinese",
             voice_clone_prompt=voice_clone_prompt,
             instruct=instruct,
         )
+        end_time = time.time()
+        print(f"生成语音克隆用时 {end_time - start_time:.2f} 秒")
         return wavs, sr
     
     def generate_blank_audio(self, duration: float = 1.0, sample_rate: int = 24000):
