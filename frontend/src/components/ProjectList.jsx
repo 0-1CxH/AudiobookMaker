@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { listProjects, createProject, deleteProject, processText } from '../api.js'
 import { useToast } from '../App.jsx'
+import SettingsModal from './SettingsModal.jsx'
 
 export default function ProjectList({ onSelectProject }) {
     const addToast = useToast()
@@ -8,6 +9,8 @@ export default function ProjectList({ onSelectProject }) {
     const [loading, setLoading] = useState(true)
     const [showCreate, setShowCreate] = useState(false)
     const [creating, setCreating] = useState(false)
+    const [showSettings, setShowSettings] = useState(false)
+    const [selectedProjectId, setSelectedProjectId] = useState(null)
 
     // Create form state
     const [newName, setNewName] = useState('')
@@ -188,7 +191,6 @@ export default function ProjectList({ onSelectProject }) {
                                                 onChange={e => handleSettingChange('quote_format', e.target.value)}
                                             >
                                                 <option value="auto">自动检测</option>
-                                                <option value="manual">手动标记</option>
                                             </select>
                                         </div>
                                         <div className="form-group">
@@ -353,6 +355,16 @@ export default function ProjectList({ onSelectProject }) {
                                         加载
                                     </button>
                                     <button
+                                        className="btn btn-secondary btn-sm"
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            setSelectedProjectId(proj.project_id)
+                                            setShowSettings(true)
+                                        }}
+                                    >
+                                        ⚙️ 项目设置
+                                    </button>
+                                    <button
                                         className="btn btn-ghost btn-sm"
                                         onClick={(e) => handleDelete(proj.project_id, e)}
                                         style={{ color: 'var(--accent-red)' }}
@@ -365,6 +377,13 @@ export default function ProjectList({ onSelectProject }) {
                     </div>
                 )}
             </div>
+
+            {showSettings && (
+                <SettingsModal
+                    projectId={selectedProjectId}
+                    onClose={() => setShowSettings(false)}
+                />
+            )}
         </div>
     )
 }

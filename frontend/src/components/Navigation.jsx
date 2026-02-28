@@ -1,7 +1,6 @@
 import React, { useState } from 'react'
 import { saveProject } from '../api.js'
 import { useToast } from '../App.jsx'
-import SettingsModal from './SettingsModal.jsx'
 
 const STEPS = [
     { num: 1, label: '项目选择', completed: true },
@@ -14,7 +13,6 @@ const STEPS = [
 export default function Navigation({ projectName, projectId, currentStep, onStepChange, onBack }) {
     const addToast = useToast()
     const [saving, setSaving] = useState(false)
-    const [showSettings, setShowSettings] = useState(false)
 
     const handleSave = async () => {
         try {
@@ -73,9 +71,6 @@ export default function Navigation({ projectName, projectId, currentStep, onStep
                         <button className="btn btn-secondary btn-sm" onClick={handleSave} disabled={saving}>
                             {saving ? '保存中...' : '💾 保存项目'}
                         </button>
-                        <button className="btn btn-secondary btn-sm" onClick={() => setShowSettings(true)}>
-                            ⚙️ 项目设置
-                        </button>
                         <button
                             className="btn btn-secondary btn-sm"
                             onClick={() => onStepChange(Math.max(2, currentStep - 1))}
@@ -97,12 +92,6 @@ export default function Navigation({ projectName, projectId, currentStep, onStep
                 </div>
             </nav>
 
-            {showSettings && (
-                <SettingsModal
-                    projectId={projectId}
-                    onClose={() => setShowSettings(false)}
-                />
-            )}
         </>
     )
 }
