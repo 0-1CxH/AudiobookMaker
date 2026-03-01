@@ -156,7 +156,7 @@ class CharacterManager:
     
     def get_all_character_descriptions(self, name_only: bool = False, use_voice_name: bool = False):
         if name_only:
-            return {character.name for character in self.characters if character.name != "默认"}
+            return {character.name for character in self.characters}
         else:
             if use_voice_name:
                 return {character.voice_name: character.description for character in self.characters if character.requires_tts}

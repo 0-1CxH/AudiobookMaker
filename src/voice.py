@@ -29,16 +29,16 @@ class VoiceDesign:
 人物小传：
 {character_description}
 
-请生成详细的TTS控制指令，包括音色特点、语调、语速、情感等语音参数。
-指令应该直接用于TTS模型，能够指导模型生成符合该人物性格和特点的语音。
-
-请直接返回TTS控制指令，不要添加任何额外的说明或格式。
+请生成详细的TTS音色控制指令，包括音色特点、语调、语速、情感等。
+指令是自然语言描述，需要能够指导模型生成符合该人物性格和特点的语音。
+请直接返回指令文本，不要添加任何额外的说明或格式。
 """
 
         try:
+            print(f"生成声音设计 {voice_name} 的TTS指令中...")
             # 调用LLM
             tts_instruction = single_llm_request(prompt=prompt).strip()
-
+            
             return cls(
                 name=voice_name,
                 tts_instruction=tts_instruction,
@@ -61,9 +61,12 @@ class VoiceManager:
         )
     
     def add_voice_design(self, voice_name: str, tts_instruction: str):
-        if self.get_voice_design(voice_name):
-            return False
-        self.voice_designs.append(VoiceDesign(voice_name, tts_instruction))
+        voice_design = self.get_voice_design(voice_name)
+        if voice_design:
+            voice_design.tts_instruction = tts_instruction
+            voice_design.reference_audio_path = None # the file still exists, but it means it's invalid
+        else:
+            self.voice_designs.append(VoiceDesign(voice_name, tts_instruction))
         return True
     
     def create_from_character_description(self, voice_name: str, character_description: str):
