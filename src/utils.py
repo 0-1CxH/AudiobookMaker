@@ -80,6 +80,16 @@ class LocalQwen3TTSModelManager:
             self._clone_model_path = clone_model_path
             self._use_flash_attention = use_flash_attention
             self._initialized = True
+        else:
+            # 如果已经初始化但传入了新的路径或参数，更新它们
+            if design_model_path and design_model_path != self._design_model_path:
+                self._design_model_path = design_model_path
+                self._design_model = None  # 重置模型以便下次加载时使用新路径
+            if clone_model_path and clone_model_path != self._clone_model_path:
+                self._clone_model_path = clone_model_path
+                self._clone_model = None  # 重置模型以便下次加载时使用新路径
+            if use_flash_attention != self._use_flash_attention:
+                self._use_flash_attention = use_flash_attention
 
     def _load_model(self, model_path: str, model_type: str):
         """加载指定类型的模型"""

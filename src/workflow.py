@@ -61,7 +61,7 @@ class Project:
         # 加载元数据
         with open(metadata_path, 'r', encoding='utf-8') as f:
             metadata = json.load(f)
-  
+        
         # 恢复原始文本
         raw_text = metadata.get('raw_text', '')
         
