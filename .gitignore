@@ -210,3 +210,4 @@ voice_lib/
 workspace/
 node_modules/
 .claude/
+.vite/

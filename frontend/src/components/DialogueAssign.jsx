@@ -227,11 +227,33 @@ export default function DialogueAssign({ projectId }) {
     const handleAssign = async (segmentIndex, speaker) => {
         setPopover(null)
         try {
+            // Find the segment before update to check previous allocation
+            const prevSegment = segments.find(s => s.index === segmentIndex)
+            const prevSpeaker = prevSegment?.allocated_speaker
+
             await updateDialogue(projectId, segmentIndex, speaker)
+
             // Update local state
             setSegments(prev => prev.map(s =>
                 s.index === segmentIndex ? { ...s, allocated_speaker: speaker } : s
             ))
+
+            // Update statistics if needed
+            if (prevSpeaker !== speaker) {
+                setStatistics(prev => {
+                    const newStats = { ...prev }
+                    // If segment was not previously allocated, increment allocated_quotes
+                    if (!prevSpeaker && speaker) {
+                        newStats.allocated_quotes = (newStats.allocated_quotes || 0) + 1
+                    }
+                    // If segment was previously allocated and now assigned to different speaker,
+                    // allocated_quotes remains the same (just transferred)
+                    // If speaker is empty (unassigning), decrement allocated_quotes
+                    // (but currently not supported in UI)
+                    return newStats
+                })
+            }
+
             addToast(`片段 #${segmentIndex} 已分配给 ${speaker}`, 'success')
         } catch (err) {
             addToast('分配失败: ' + err.message, 'error')
