@@ -378,6 +378,40 @@ class ProjectAdapter:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
+    def regenerate_segment(self, segment_index: int) -> Dict[str, Any]:
+        """重新生成单个音频片段"""
+        if not self.project:
+            return {'success': False, 'error': 'Project not loaded'}
+
+        try:
+            # 检查片段索引是否有效
+            if segment_index < 0 or segment_index >= len(self.project.text_manager.data):
+                return {'success': False, 'error': f'Segment index {segment_index} out of range'}
+
+            # 先删除已有的音频片段（如果存在）
+            if segment_index in self.project.text_to_audio_segment_map:
+                self.project.remove_audio_segments_by_index(segment_index)
+
+            # 重新生成指定片段的音频
+            self.project.generate_text_to_audio_segment(segment_ids=[segment_index])
+
+            # 保存项目状态
+            self.project.save()
+
+            # 检查是否成功生成
+            has_audio = segment_index in self.project.text_to_audio_segment_map
+            segment = self.get_text_segments()[segment_index] if has_audio else None
+
+            return {
+                'success': has_audio,
+                'segment_index': segment_index,
+                'has_audio': has_audio,
+                'segment': segment,
+                'message': f'Segment {segment_index} regenerated successfully' if has_audio else f'Failed to regenerate segment {segment_index}'
+            }
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
     def render_final_audio(self) -> Dict[str, Any]:
         """渲染最终音频"""
         if not self.project:

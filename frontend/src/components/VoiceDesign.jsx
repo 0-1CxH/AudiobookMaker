@@ -229,12 +229,15 @@ export default function VoiceDesign({ projectId }) {
 
     const handleGenerateAllRefAudio = async () => {
         try {
+            setGenerating(true)
             addToast('正在生成所有参考音频...', 'info')
             await generateReferenceAudio(projectId)
             addToast('参考音频生成完成', 'success')
             fetchData()
         } catch (err) {
             addToast('生成参考音频失败: ' + err.message, 'error')
+        } finally {
+            setGenerating(false)
         }
     }
 
@@ -307,6 +310,7 @@ export default function VoiceDesign({ projectId }) {
                         <button
                             className="btn btn-secondary btn-sm"
                             onClick={handleGenerateAllRefAudio}
+                            disabled={generating}
                         >
                             🔊 生成所有参考音频
                         </button>
@@ -373,7 +377,7 @@ export default function VoiceDesign({ projectId }) {
                                             <button
                                                 className="btn btn-secondary btn-sm"
                                                 onClick={() => setEditDesign(design || { name: char.voice_name, tts_instruction: '', reference_text: '', has_reference_audio: false })}
-                                                disabled={disabled}
+                                                disabled={disabled || generating}
                                             >
                                                 编辑
                                             </button>

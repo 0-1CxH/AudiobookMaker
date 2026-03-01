@@ -274,7 +274,7 @@ class Project:
             for voice_name, description in character_voice_names_and_descriptions.items():
                 self.voice_manager.generate_reference_audio(voice_name)
 
-    def generate_text_to_audio_segment(self):
+    def generate_text_to_audio_segment(self, segment_ids=None):
         """将文本片段转换为音频片段
 
         处理规则：
@@ -284,6 +284,9 @@ class Project:
 
         生成的音频文件保存到voice_artifacts_path目录，对应关系存储到text_to_audio_segment_map中，
         支持断点续执行（已生成过的片段跳过）
+
+        Args:
+            segment_ids: 可选，指定要生成的片段索引列表。如果为None或空，则生成所有未生成的片段。
         """
         # 获取默认人物
         default_character = self.character_manager.get_character("默认")
@@ -291,17 +294,34 @@ class Project:
             print("错误：默认人物不存在，请确保已初始化默认人物")
             return
 
-        for i, segment in enumerate(self.text_manager.data):
+        # 确定要处理的片段索引
+        if segment_ids is None or len(segment_ids) == 0:
+            # 生成所有未生成的片段
+            indices_to_process = range(len(self.text_manager.data))
+        else:
+            # 只生成指定的片段
+            indices_to_process = segment_ids
+            # 确保segment_ids是列表形式
+            if not isinstance(indices_to_process, list):
+                indices_to_process = [indices_to_process]
+
+        for i in indices_to_process:
+            # 检查索引是否在有效范围内
+            if i < 0 or i >= len(self.text_manager.data):
+                print(f"警告：片段索引 {i} 超出范围，跳过")
+                continue
+
             # 如果已经生成过，跳过
             if i in self.text_to_audio_segment_map:
                 continue
 
+            segment = self.text_manager.data[i]
             tag = segment.tag
             content = segment.content
             audio_file_name = f"segment_{i}.wav"
             audio_file_path = os.path.join(self.voice_artifacts_path, audio_file_name)
 
-            if tag == TextManager.QUOTE_TAG:
+            if tag != TextManager.PLACEHOLDER_TAG and tag != TextManager.DEFAULT_TAG:
                 # QUOTE_TAG: 标签本身是人物名字，需要找到对应的人物
                 character_name = tag  # tag就是人物名字
                 character = self.character_manager.get_character(character_name)

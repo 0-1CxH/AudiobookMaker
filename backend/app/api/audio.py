@@ -176,11 +176,18 @@ def regenerate_segment(project_id, segment_index):
                 error=f'Segment index {segment_index} out of range'
             ).dict()), 404
 
-        # TODO: 实现重新生成单个片段的功能
+        # 调用适配器重新生成片段
+        result = adapter.regenerate_segment(segment_index)
+
+        if not result.get('success'):
+            return jsonify(ErrorResponse(
+                error=result.get('error', f'Failed to regenerate segment {segment_index}')
+            ).dict()), 500
+
         return jsonify(StandardResponse(
             success=True,
-            message=f'Segment {segment_index} regeneration started (feature not fully implemented yet)',
-            data={'segment_index': segment_index}
+            message=result.get('message', f'Segment {segment_index} regenerated successfully'),
+            data=result
         ).dict())
 
     except Exception as e:
@@ -214,37 +221,28 @@ def get_segment_audio(project_id, segment_index):
                 error=f'Segment {segment_index} has no audio generated'
             ).dict()), 404
 
-        # TODO: 获取音频文件路径 - 需要从project_adapter或project对象中获取
-        # 假设音频文件存储在workspace/projects/{project_id}/audio_segments/{segment_index}.wav
+        # 获取音频文件路径 - 从project_adapter获取或根据项目结构推断
         workspace_path = os.environ.get('WORKSPACE_PATH', './workspace')
-        audio_file_path = os.path.join(
+
+        # 尝试voice_artifacts目录（这是Project类实际存储音频的地方）
+        voice_artifacts_path = os.path.join(
             workspace_path,
             'projects',
             project_id,
-            'audio_segments',
-            f'{segment_index}.wav'
+            'voice_artifacts',
+            f'segment_{segment_index}.wav'
         )
-
-        if not os.path.exists(audio_file_path):
-            # 尝试其他可能的路径
-            # 检查是否在project的audio文件夹中
-            alt_path = os.path.join(
-                workspace_path,
-                'projects',
-                project_id,
-                'audio',
-                f'{segment_index}.wav'
-            )
-            if os.path.exists(alt_path):
-                audio_file_path = alt_path
-            else:
-                return jsonify(ErrorResponse(
-                    error=f'Audio file not found for segment {segment_index}'
-                ).dict()), 404
+        # 检查文件存在
+        if os.path.exists(voice_artifacts_path):
+            audio_file_path = voice_artifacts_path
+        else:
+            return jsonify(ErrorResponse(
+                error=f'Audio file not found for segment {segment_index}'
+            ).dict()), 404
 
         # 发送音频文件
         return send_file(
-            audio_file_path,
+            os.path.abspath(audio_file_path),
             as_attachment=False,
             download_name=f'segment_{segment_index}_audio.wav',
             mimetype='audio/wav'
