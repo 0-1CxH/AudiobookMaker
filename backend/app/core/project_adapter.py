@@ -376,6 +376,7 @@ class ProjectAdapter:
                 'segments': self.get_text_segments()
             }
         except Exception as e:
+            self.project.save()
             return {'success': False, 'error': str(e)}
 
     def regenerate_segment(self, segment_index: int) -> Dict[str, Any]:

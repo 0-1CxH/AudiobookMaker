@@ -391,10 +391,6 @@ export default function AudioGenerate({ projectId }) {
 
                 <div className="audio-segments-list">
                     {segments.map((seg) => {
-                        if (seg.tag === 'PLACEHOLDER' && (seg.content === '\n' || seg.content.trim() === '')) {
-                            return null
-                        }
-
                         const isGenerated = seg.has_audio
 
                         return (

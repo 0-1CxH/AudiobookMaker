@@ -2,6 +2,7 @@ import os
 import json
 import concurrent.futures
 from dataclasses import dataclass, asdict
+from tqdm import tqdm
 from .character import CharacterManager, Character
 from .text import TextManager, TaggedTextSegment
 from .voice import VoiceManager, VoiceDesign
@@ -280,7 +281,7 @@ class Project:
         处理规则：
         1. QUOTE_TAG: 找到对应人物，获取voice_name，使用voice_manager.generate_voice生成音频
         2. DEFAULT_TAG: 使用默认人物（已初始化在character_manager中）
-        3. PLACEHOLDER_TAG: 暂时用pass处理，将来生成空白音频
+        3. PLACEHOLDER_TAG: 根据content内容生成不同类型的空白音频（换行符、句末标点、普通占位符）
 
         生成的音频文件保存到voice_artifacts_path目录，对应关系存储到text_to_audio_segment_map中，
         支持断点续执行（已生成过的片段跳过）
@@ -305,7 +306,7 @@ class Project:
             if not isinstance(indices_to_process, list):
                 indices_to_process = [indices_to_process]
 
-        for i in indices_to_process:
+        for i in tqdm(indices_to_process, desc="生成音频片段"):
             # 检查索引是否在有效范围内
             if i < 0 or i >= len(self.text_manager.data):
                 print(f"警告：片段索引 {i} 超出范围，跳过")
