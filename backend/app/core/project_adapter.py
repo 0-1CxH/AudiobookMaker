@@ -373,6 +373,25 @@ class ProjectAdapter:
             }
         except Exception as e:
             return {'success': False, 'error': str(e)}
+    
+    def get_percentage_generated(self) -> Dict[str, Any]:
+        """获取生成进度百分比"""
+        if not self.project:
+            return {'success': False, 'error': 'Project not loaded'}
+
+        try:
+            total = len(self.project.text_manager.data)
+            generated = total - len(self.project.not_yet_generated_segments())
+            percentage = (generated / total * 100) if total > 0 else 0
+            
+            return {
+                'success': True,
+                'generated_count': generated,
+                'total_count': total,
+                'percentage': percentage
+            }
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
 
     def regenerate_segment(self, segment_index: int) -> Dict[str, Any]:
         """重新生成单个音频片段"""

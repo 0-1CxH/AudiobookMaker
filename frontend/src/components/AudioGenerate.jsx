@@ -276,15 +276,28 @@ export default function AudioGenerate({ projectId }) {
                     addToast('音频生成失败: ' + (res.data?.message || '未知错误'), 'error')
                     fetchData()
                 } else {
-                    // Update progress
-                    if (res.data?.progress) {
-                        setProgress(prev => ({ ...prev, progress_percentage: res.data.progress }))
-                    }
+                    // Update progress with real-time data
+                    const total = res.data?.progress?.total_count || 0
+                    const processed = res.data?.progress?.generated_count || 0
+                    const progressPct = res.data?.progress?.percentage || 0
+                    const message = res.data?.message
+
+                    // Update progress state
+                    setProgress(prev => ({
+                        ...prev,
+                        generated_count: processed,
+                        total_count: total,
+                        progress_percentage: progressPct
+                    }))
+
+                    // Log progress for debugging
+                    console.log(`Audio generation progress: ${processed}/${total} (${progressPct}%) - ${message || ''}`)
                 }
             } catch (err) {
-                // Ignore polling errors
+                console.error('Error polling audio status:', err)
+                // Don't stop polling on occasional errors, but log them
             }
-        }, 3000)
+        }, 1000)
 
         return () => {
             if (pollRef.current) clearInterval(pollRef.current)

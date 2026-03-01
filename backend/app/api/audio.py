@@ -68,8 +68,9 @@ def generate_audio(project_id):
                 # 逐个生成未生成的片段
                 for i, seg_index in enumerate(tqdm(not_generated, desc='Generating audio segments')):
                     # 更新状态
-                    task_status_store[task_id]['message'] = f'Generating segment {seg_index} ({i+1}/{total})'
-                    task_status_store[task_id]['progress'] = int((i / total) * 100) if total > 0 else 0
+                    task_status_store[task_id]['message'] = f'Generating segment {seg_index} (current task progress: {i+1}/{total})'
+                    task_status_store[task_id]['progress'] = adapter.get_percentage_generated()
+                    task_status_store[task_id]['current_task_progress'] = int((i / total) * 100) if total > 0 else 0
                     task_status_store[task_id]['current_segment'] = seg_index
                     task_status_store[task_id]['updated_at'] = time.time()
 
@@ -85,7 +86,8 @@ def generate_audio(project_id):
                         task_status_store[task_id]['processed_segments'] += 1
 
                     # 更新进度
-                    task_status_store[task_id]['progress'] = int(((i + 1) / total) * 100) if total > 0 else 100
+                    task_status_store[task_id]['progress'] = adapter.get_percentage_generated()
+                    task_status_store[task_id]['current_task_progress'] = int((i / total) * 100) if total > 0 else 0
                     task_status_store[task_id]['updated_at'] = time.time()
 
                 # 所有片段处理完成
