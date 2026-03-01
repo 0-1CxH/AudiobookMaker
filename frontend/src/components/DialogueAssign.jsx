@@ -25,7 +25,10 @@ export default function DialogueAssign({ projectId }) {
     const [loading, setLoading] = useState(true)
     const [allocating, setAllocating] = useState(false)
     const [currentPage, setCurrentPage] = useState(1)
+    const [focusedSegmentIndex, setFocusedSegmentIndex] = useState(null)
+    const [highlightedSegmentIndex, setHighlightedSegmentIndex] = useState(null)
     const segmentsPerPage = 50
+    const highlightTimeoutRef = useRef(null)
 
     // Popover state
     const [popover, setPopover] = useState(null) // { segmentIndex, x, y }
@@ -70,6 +73,15 @@ export default function DialogueAssign({ projectId }) {
         return () => document.removeEventListener('mousedown', handleClickOutside)
     }, [])
 
+    // Cleanup highlight timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (highlightTimeoutRef.current) {
+                clearTimeout(highlightTimeoutRef.current)
+            }
+        }
+    }, [])
+
     const handleAllocate = async () => {
         try {
             setAllocating(true)
@@ -85,12 +97,126 @@ export default function DialogueAssign({ projectId }) {
         }
     }
 
+    // Helper to check if a segment is unassigned (assignable but not assigned)
+    const isUnassigned = (seg) => {
+        return seg.tag !== 'DEFAULT' && seg.tag !== 'PLACEHOLDER' && !seg.allocated_speaker
+    }
+
+    // Find previous unassigned segment from current index
+    const findPrevUnassigned = (currentIndex) => {
+        // Find array index of current segment
+        let startArrayIdx = -1
+        if (currentIndex !== null) {
+            startArrayIdx = segments.findIndex(s => s.index === currentIndex)
+        }
+        // If current not found or no current, start from the end
+        let startIdx = startArrayIdx >= 0 ? startArrayIdx - 1 : segments.length - 1
+        for (let i = startIdx; i >= 0; i--) {
+            if (isUnassigned(segments[i])) {
+                return segments[i]
+            }
+        }
+        // Wrap around to the end
+        for (let i = segments.length - 1; i > startIdx; i--) {
+            if (isUnassigned(segments[i])) {
+                return segments[i]
+            }
+        }
+        return null
+    }
+
+    // Find next unassigned segment from current index
+    const findNextUnassigned = (currentIndex) => {
+        // Find array index of current segment
+        let startArrayIdx = -1
+        if (currentIndex !== null) {
+            startArrayIdx = segments.findIndex(s => s.index === currentIndex)
+        }
+        // If current not found or no current, start from the beginning
+        let startIdx = startArrayIdx >= 0 ? startArrayIdx + 1 : 0
+        for (let i = startIdx; i < segments.length; i++) {
+            if (isUnassigned(segments[i])) {
+                return segments[i]
+            }
+        }
+        // Wrap around to the beginning
+        for (let i = 0; i < startIdx; i++) {
+            if (isUnassigned(segments[i])) {
+                return segments[i]
+            }
+        }
+        return null
+    }
+
+    // Navigate to previous unassigned segment
+    const navigateToPrevUnassigned = () => {
+        const prevSeg = findPrevUnassigned(focusedSegmentIndex)
+        if (prevSeg) {
+            // Find array index of this segment
+            const arrayIndex = segments.findIndex(s => s.index === prevSeg.index)
+            if (arrayIndex >= 0) {
+                // Calculate page containing this segment
+                const page = Math.floor(arrayIndex / segmentsPerPage) + 1
+                setCurrentPage(page)
+                setFocusedSegmentIndex(prevSeg.index)
+                // Scroll to element after render
+                setTimeout(() => {
+                    const elem = document.getElementById(`segment-${prevSeg.index}`)
+                    if (elem) {
+                        elem.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                        elem.focus()
+                    }
+                }, 100)
+            }
+        }
+    }
+
+    // Navigate to next unassigned segment
+    const navigateToNextUnassigned = () => {
+        const nextSeg = findNextUnassigned(focusedSegmentIndex)
+        if (nextSeg) {
+            // Find array index of this segment
+            const arrayIndex = segments.findIndex(s => s.index === nextSeg.index)
+            if (arrayIndex >= 0) {
+                // Calculate page containing this segment
+                const page = Math.floor(arrayIndex / segmentsPerPage) + 1
+                setCurrentPage(page)
+                setFocusedSegmentIndex(nextSeg.index)
+                // Scroll to element after render
+                setTimeout(() => {
+                    const elem = document.getElementById(`segment-${nextSeg.index}`)
+                    if (elem) {
+                        elem.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                        elem.focus()
+                    }
+                }, 100)
+            }
+        }
+    }
+
+    const handleSegmentFocus = (segmentIndex) => {
+        setFocusedSegmentIndex(segmentIndex)
+        setHighlightedSegmentIndex(segmentIndex)
+
+        // Clear previous timeout if exists
+        if (highlightTimeoutRef.current) {
+            clearTimeout(highlightTimeoutRef.current)
+        }
+
+        // Set timeout to clear highlight after 2 seconds
+        highlightTimeoutRef.current = setTimeout(() => {
+            setHighlightedSegmentIndex(null)
+        }, 2000)
+    }
+
     const handleSegmentClick = (seg, e) => {
         // 只允许点击非DEFAULT和非PLACEHOLDER的segment（即可分配的segment）
         // DEFAULT和PLACEHOLDER不可分配，不需要点击
         if (seg.tag === 'DEFAULT' || seg.tag === 'PLACEHOLDER') return
 
         const rect = e.currentTarget.getBoundingClientRect()
+        handleSegmentFocus(seg.index)
+        e.currentTarget.focus()
         setPopover({
             segmentIndex: seg.index,
             x: rect.left + rect.width / 2,
@@ -128,15 +254,36 @@ export default function DialogueAssign({ projectId }) {
         }
     })
 
+    // Check if there are any unassigned segments
+    const hasUnassigned = (statistics.allocated_quotes || 0) < (statistics.total_quotes || 0)
+
     return (
         <div className="split-layout">
             {/* Left: Text with Assignment */}
             <div className="card">
                 <div className="card-header">
                     <span className="card-title">📝 对话分配</span>
-                    <span className="text-xs text-muted">
-                        {statistics.allocated_quotes || 0}/{statistics.total_quotes || 0} 已分配
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                        <button
+                            className="btn btn-ghost btn-xs"
+                            onClick={navigateToPrevUnassigned}
+                            disabled={!hasUnassigned}
+                            title="上一个未分配"
+                        >
+                            &lt;
+                        </button>
+                        <span className="text-xs text-muted">
+                            {statistics.allocated_quotes || 0}/{statistics.total_quotes || 0} 已分配
+                        </span>
+                        <button
+                            className="btn btn-ghost btn-xs"
+                            onClick={navigateToNextUnassigned}
+                            disabled={!hasUnassigned}
+                            title="下一个未分配"
+                        >
+                            &gt;
+                        </button>
+                    </div>
                 </div>
                 <div style={{ maxHeight: 'calc(100vh - 280px)', overflowY: 'auto', position: 'relative'}}>
                     {(() => {
@@ -166,8 +313,11 @@ export default function DialogueAssign({ projectId }) {
                             return (
                                 <div
                                     key={seg.index}
+                                    id={`segment-${seg.index}`}
                                     className={`segment-block ${tagClass}`}
+                                    tabIndex={isAssignable ? 0 : -1}
                                     onClick={isAssignable ? (e) => handleSegmentClick(seg, e) : undefined}
+                                    onFocus={() => handleSegmentFocus(seg.index)}
                                     style={{
                                         cursor: isAssignable ? 'pointer' : 'default',
                                         color: isNonAssignable ? 'var(--text-muted)' : 'var(--text-primary)',
@@ -177,6 +327,13 @@ export default function DialogueAssign({ projectId }) {
                                             ? {
                                                 background: `${speakerColor}15`,
                                                 borderLeftColor: speakerColor,
+                                            }
+                                            : {}),
+                                        ...(seg.index === highlightedSegmentIndex
+                                            ? {
+                                                boxShadow: '0 0 0 2px rgba(255, 204, 0, 0.5)',
+                                                backgroundColor: 'rgba(255, 204, 0, 0.1)',
+                                                transition: 'box-shadow 0.3s ease, background-color 0.3s ease',
                                             }
                                             : {}),
                                     }}

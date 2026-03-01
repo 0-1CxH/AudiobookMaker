@@ -501,9 +501,31 @@ export default function AudioGenerate({ projectId }) {
 
             {/* Segments List */}
             <div className="card">
-                <div className="card-header">
+                <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span className="card-title">📋 文本片段状态</span>
-                    <span className="text-xs text-muted">点击查看详情</span>
+                    {totalPages > 1 && (
+                        <div className="pagination-container" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
+                            <div className="pagination-info text-sm text-muted">
+                                第 {currentPage}/{totalPages} 页，共 {segments.length} 个片段
+                            </div>
+                            <div className="pagination-controls" style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                                <button
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                    disabled={currentPage === 1}
+                                >
+                                    上一页
+                                </button>
+                                <button
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                    disabled={currentPage === totalPages}
+                                >
+                                    下一页
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 <div className="audio-segments-list">
@@ -568,37 +590,6 @@ export default function AudioGenerate({ projectId }) {
                     </span>
                 </div>
 
-                {/* Pagination */}
-                {totalPages > 1 && (
-                    <div className="pagination-container" style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        marginTop: 'var(--space-4)',
-                        padding: 'var(--space-3) var(--space-4)',
-                        borderTop: '1px solid var(--border-color)'
-                    }}>
-                        <div className="pagination-info text-sm text-muted">
-                            第 {currentPage}/{totalPages} 页，共 {segments.length} 个片段
-                        </div>
-                        <div className="pagination-controls" style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                            <button
-                                className="btn btn-ghost btn-sm"
-                                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                                disabled={currentPage === 1}
-                            >
-                                上一页
-                            </button>
-                            <button
-                                className="btn btn-ghost btn-sm"
-                                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                                disabled={currentPage === totalPages}
-                            >
-                                下一页
-                            </button>
-                        </div>
-                    </div>
-                )}
             </div>
 
             {/* Segment Detail Modal */}
