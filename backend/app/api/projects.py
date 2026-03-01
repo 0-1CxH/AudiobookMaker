@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from pydantic import ValidationError
 import os
 import sys
+import shutil
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '..', 'src'))
@@ -151,10 +152,6 @@ def update_project(project_id):
     """更新项目"""
     try:
         data = request.get_json()
-        if not data:
-            return jsonify(ErrorResponse(
-                error='Request body is required'
-            ).dict()), 400
 
         adapter = ProjectAdapter(project_id)
         project_info = adapter.get_project_info()
@@ -164,11 +161,22 @@ def update_project(project_id):
                 error=f'Project {project_id} not found'
             ).dict()), 404
 
-        # 目前只支持更新原始文本
-        raw_text = data.get('raw_text')
-        if raw_text is not None:
-            # TODO: 实现更新文本的功能
-            pass
+        # 支持更新项目设置
+        project_setting = data.get('project_setting')
+        
+        updated = False
+
+        if project_setting is not None:
+            # 更新项目设置
+            result = adapter.update_settings(project_setting)
+            if not result.get('success'):
+                return jsonify(ErrorResponse(
+                    error=result.get('error', 'Failed to update settings')
+                ).dict()), 400
+            updated = True
+        
+        if not updated:
+            adapter.save_project()
 
         return jsonify(StandardResponse(
             success=True,
@@ -196,7 +204,6 @@ def delete_project(project_id):
             ).dict()), 404
 
         # TODO: 实现删除项目目录
-        import shutil
         workspace_path = os.environ.get('WORKSPACE_PATH', './workspace')
         project_path = os.path.join(workspace_path, 'projects', project_id)
 

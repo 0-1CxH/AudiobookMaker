@@ -48,6 +48,16 @@ class ProjectAdapter:
         else:
             # 项目不存在，将在需要时创建
             self.project = None
+    
+    def save_project(self):
+        """保存项目状态"""
+        if self.project:
+            try:
+                self.project.save()
+                print(f"Project {self.project_id} saved successfully")
+            except Exception as e:
+                print(f"Failed to save project {self.project_id}: {e}")
+                raise
 
     def create_project(self, raw_text: str = "", settings: Optional[Dict] = None) -> Dict[str, Any]:
         """创建新项目"""
@@ -94,7 +104,8 @@ class ProjectAdapter:
             'segment_count': len(self.project.text_manager.data),
             'allocated_dialogues': len(self.project.text_manager.allocation_map),
             'generated_audio_count': len(self.project.text_to_audio_segment_map),
-            'raw_text_length': len(self.project.raw_text) if self.project.raw_text else 0
+            'raw_text_length': len(self.project.raw_text) if self.project.raw_text else 0,
+            'project_setting': asdict(self.project.project_setting) if self.project.project_setting else None
         }
 
     def extract_characters(self) -> Dict[str, Any]:
@@ -148,6 +159,36 @@ class ProjectAdapter:
 
             self.project.save()
             return {'success': True, 'character': self._character_to_dict(character)}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def update_settings(self, settings: Dict[str, Any]) -> Dict[str, Any]:
+        """更新项目设置"""
+        if not self.project:
+            return {'success': False, 'error': 'Project not loaded'}
+
+        try:
+            # 更新项目设置字段
+            for key, value in settings.items():
+                if hasattr(self.project.project_setting, key):
+                    setattr(self.project.project_setting, key, value)
+                else:
+                    # 忽略未知字段
+                    print(f"Warning: Unknown setting field '{key}' ignored")
+
+            # 如果voice相关设置发生变化，更新voice_manager路径
+            voice_related_keys = ['voice_lib_folder_path', 'design_model_path', 'clone_model_path', 'use_flash_attention']
+            if any(key in settings for key in voice_related_keys):
+                self.project.voice_manager.voice_lib_folder_path = self.project.project_setting.voice_lib_folder_path
+                self.project.voice_manager.model_manager = self.project.voice_manager.model_manager.__class__(
+                    self.project.project_setting.design_model_path,
+                    self.project.project_setting.clone_model_path,
+                    self.project.project_setting.use_flash_attention
+                )
+
+            # 保存项目
+            self.project.save()
+            return {'success': True, 'message': 'Settings updated successfully'}
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
@@ -215,10 +256,19 @@ class ProjectAdapter:
 
         segments = []
         for i, segment in enumerate(self.project.text_manager.data):
+            # 转换tag值为前端友好的格式
+            tag = segment.tag
+            if tag == "__quote__":
+                tag = "QUOTE"
+            elif tag == "__placeholder__":
+                tag = "PLACEHOLDER"
+            elif tag == "__default__":
+                tag = "DEFAULT"
+
             segments.append({
                 'index': i,
                 'content': segment.content,
-                'tag': segment.tag,
+                'tag': tag,
                 'allocated_speaker': self.project.text_manager.allocation_map.get(i),
                 'has_audio': i in self.project.text_to_audio_segment_map
             })
@@ -283,16 +333,33 @@ class ProjectAdapter:
             })
         return designs
 
-    def generate_audio(self) -> Dict[str, Any]:
-        """生成音频"""
+    def generate_reference_audio(self, character_name: str = None) -> Dict[str, Any]:
+        """生成参考音频"""
         if not self.project:
             return {'success': False, 'error': 'Project not loaded'}
 
         try:
-            # 开始生成音频
-            self.project.generate_text_to_audio_segment()
+            self.project.generate_reference_audio(character_name)
             self.project.save()
 
+            # 返回更新后的语音设计列表
+            designs = self.get_voice_designs()
+
+            return {
+                'success': True,
+                'message': f'Reference audio generated for {character_name or "all TTS characters"}',
+                'voice_designs': designs,
+                'character_name': character_name
+            }
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def generate_audio(self) -> Dict[str, Any]:
+        """获取未生成的音频片段列表，但不实际生成"""
+        if not self.project:
+            return {'success': False, 'error': 'Project not loaded'}
+
+        try:
             # 检查生成状态
             not_generated = self.project.not_yet_generated_segments()
             generated_count = len(self.project.text_manager.data) - len(not_generated)
@@ -303,6 +370,59 @@ class ProjectAdapter:
                 'total_count': len(self.project.text_manager.data),
                 'not_generated': not_generated,
                 'segments': self.get_text_segments()
+            }
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+    
+    def get_percentage_generated(self) -> Dict[str, Any]:
+        """获取生成进度百分比"""
+        if not self.project:
+            return {'success': False, 'error': 'Project not loaded'}
+
+        try:
+            total = len(self.project.text_manager.data)
+            generated = total - len(self.project.not_yet_generated_segments())
+            percentage = (generated / total * 100) if total > 0 else 0
+            
+            return {
+                'success': True,
+                'generated_count': generated,
+                'total_count': total,
+                'percentage': percentage
+            }
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def regenerate_segment(self, segment_index: int) -> Dict[str, Any]:
+        """重新生成单个音频片段"""
+        if not self.project:
+            return {'success': False, 'error': 'Project not loaded'}
+
+        try:
+            # 检查片段索引是否有效
+            if segment_index < 0 or segment_index >= len(self.project.text_manager.data):
+                return {'success': False, 'error': f'Segment index {segment_index} out of range'}
+
+            # 先删除已有的音频片段（如果存在）
+            if segment_index in self.project.text_to_audio_segment_map:
+                self.project.remove_audio_segments_by_index(segment_index)
+
+            # 重新生成指定片段的音频
+            self.project.generate_text_to_audio_segment(segment_ids=[segment_index])
+
+            # 保存项目状态
+            self.project.save()
+
+            # 检查是否成功生成
+            has_audio = segment_index in self.project.text_to_audio_segment_map
+            segment = self.get_text_segments()[segment_index] if has_audio else None
+
+            return {
+                'success': has_audio,
+                'segment_index': segment_index,
+                'has_audio': has_audio,
+                'segment': segment,
+                'message': f'Segment {segment_index} regenerated successfully' if has_audio else f'Failed to regenerate segment {segment_index}'
             }
         except Exception as e:
             return {'success': False, 'error': str(e)}

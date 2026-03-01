@@ -1,5 +1,6 @@
 import os
 import json
+import concurrent.futures
 from dataclasses import dataclass, asdict
 from .character import CharacterManager, Character
 from .text import TextManager, TaggedTextSegment
@@ -56,19 +57,20 @@ class Project:
 
         if not os.path.exists(metadata_path):
             raise FileNotFoundError(f"项目元数据文件不存在: {metadata_path}")
-
-        # 创建空项目
-        project = cls(name, raw_text="")
-
+        
         # 加载元数据
         with open(metadata_path, 'r', encoding='utf-8') as f:
             metadata = json.load(f)
-
-        # 恢复ProjectSetting
-        project.project_setting = ProjectSetting(**metadata.get('project_setting', {}))
-
+  
         # 恢复原始文本
-        project.raw_text = metadata.get('raw_text', '')
+        raw_text = metadata.get('raw_text', '')
+        
+        # 恢复ProjectSetting
+        project_setting = ProjectSetting(**metadata.get('project_setting', {}))
+
+        # 创建空项目
+        project = cls(name, raw_text=raw_text, project_setting=project_setting)
+
 
         # 恢复文本管理器
         text_data = metadata.get('text_manager', {})
@@ -77,7 +79,8 @@ class Project:
                 TaggedTextSegment(content=seg['content'], tag=seg['tag'])
                 for seg in text_data.get('data', [])
             ]
-            project.text_manager.allocation_map = text_data.get('allocation_map', {})
+            _allocation_map = text_data.get('allocation_map', {})
+            project.text_manager.allocation_map = {int(k): v for k, v in _allocation_map.items()} # change keys to int
 
         # 恢复人物管理器
         characters_data = metadata.get('character_manager', {}).get('characters', [])
@@ -201,7 +204,7 @@ class Project:
         self.character_manager.set_character_requires_tts(name, requires_tts)
 
     def generate_character_description(self, name: str, suggestion: str = ""):
-        self.character_manager.generate_character_description(
+        return self.character_manager.generate_character_description(
             text=self.raw_text,
             character_name=name,
             suggestion=suggestion
@@ -217,6 +220,8 @@ class Project:
     def generate_quote_allocation(self):
         character_names = self.get_character_names()
         assert character_names, "未找到任何人物，请先提取或添加人物"
+        if "默认" in character_names:
+            character_names.remove("默认")  # 默认人物不参与对话分配
         self.text_manager.allocate_quote_to_character(character_names, self.project_setting.context_window)
 
     def set_voice_design_tts_instruction(self, voice_name: str, instruction: str):
@@ -228,8 +233,32 @@ class Project:
     def generate_voice_design(self):
         character_voice_names_and_descriptions = self.get_character_voice_names_and_descriptions()
         assert character_voice_names_and_descriptions, "未找到任何需要TTS的人物，先设置需要TTS的人物"
-        for voice_name, description in character_voice_names_and_descriptions.items():
-            self.voice_manager.create_from_character_description(voice_name, description)
+
+        # 使用线程池并发执行
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            # 提交所有任务
+            future_to_voice_name = {}
+            for voice_name, description in character_voice_names_and_descriptions.items():
+                future = executor.submit(
+                    self.voice_manager.create_from_character_description,
+                    voice_name,
+                    description
+                )
+                future_to_voice_name[future] = voice_name
+
+            # 等待所有任务完成，收集结果
+            results = []
+            for future in concurrent.futures.as_completed(future_to_voice_name):
+                voice_name = future_to_voice_name[future]
+                try:
+                    result = future.result()
+                    results.append((voice_name, result))
+                except Exception as e:
+                    print(f"生成语音设计失败 (人物: {voice_name}): {e}")
+
+            # 统计结果
+            success_count = sum(1 for _, result in results if result)
+            print(f"语音设计生成完成: {success_count}/{len(results)} 成功")
 
     def generate_reference_audio(self, character_name: str = None):
         if character_name:
@@ -245,16 +274,19 @@ class Project:
             for voice_name, description in character_voice_names_and_descriptions.items():
                 self.voice_manager.generate_reference_audio(voice_name)
 
-    def generate_text_to_audio_segment(self):
+    def generate_text_to_audio_segment(self, segment_ids=None):
         """将文本片段转换为音频片段
 
         处理规则：
         1. QUOTE_TAG: 找到对应人物，获取voice_name，使用voice_manager.generate_voice生成音频
         2. DEFAULT_TAG: 使用默认人物（已初始化在character_manager中）
-        3. PLACEHOLDER_TAG: 暂时用pass处理，将来生成空白音频
+        3. PLACEHOLDER_TAG: 根据content内容生成不同类型的空白音频（换行符、句末标点、普通占位符）
 
         生成的音频文件保存到voice_artifacts_path目录，对应关系存储到text_to_audio_segment_map中，
         支持断点续执行（已生成过的片段跳过）
+
+        Args:
+            segment_ids: 可选，指定要生成的片段索引列表。如果为None或空，则生成所有未生成的片段。
         """
         # 获取默认人物
         default_character = self.character_manager.get_character("默认")
@@ -262,17 +294,34 @@ class Project:
             print("错误：默认人物不存在，请确保已初始化默认人物")
             return
 
-        for i, segment in enumerate(self.text_manager.data):
+        # 确定要处理的片段索引
+        if segment_ids is None or len(segment_ids) == 0:
+            # 生成所有未生成的片段
+            indices_to_process = range(len(self.text_manager.data))
+        else:
+            # 只生成指定的片段
+            indices_to_process = segment_ids
+            # 确保segment_ids是列表形式
+            if not isinstance(indices_to_process, list):
+                indices_to_process = [indices_to_process]
+
+        for i in indices_to_process:
+            # 检查索引是否在有效范围内
+            if i < 0 or i >= len(self.text_manager.data):
+                print(f"警告：片段索引 {i} 超出范围，跳过")
+                continue
+
             # 如果已经生成过，跳过
             if i in self.text_to_audio_segment_map:
                 continue
 
+            segment = self.text_manager.data[i]
             tag = segment.tag
             content = segment.content
             audio_file_name = f"segment_{i}.wav"
             audio_file_path = os.path.join(self.voice_artifacts_path, audio_file_name)
 
-            if tag == TextManager.QUOTE_TAG:
+            if tag != TextManager.PLACEHOLDER_TAG and tag != TextManager.DEFAULT_TAG:
                 # QUOTE_TAG: 标签本身是人物名字，需要找到对应的人物
                 character_name = tag  # tag就是人物名字
                 character = self.character_manager.get_character(character_name)

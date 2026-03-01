@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_file
 import os
 import sys
 
@@ -159,12 +159,21 @@ def generate_reference_audio(project_id):
                 error=f'Project {project_id} not found'
             ).dict()), 404
 
-        # TODO: 在ProjectAdapter中添加生成参考音频的方法
-        # 目前暂时返回成功
+        # 调用ProjectAdapter生成参考音频
+        result = adapter.generate_reference_audio(character_name)
+
+        if not result.get('success'):
+            return jsonify(ErrorResponse(
+                error=result.get('error', 'Failed to generate reference audio')
+            ).dict()), 500
+
         return jsonify(StandardResponse(
             success=True,
-            message='Reference audio generation started (feature not fully implemented yet)',
-            data={'character_name': character_name}
+            message=result.get('message', 'Reference audio generated successfully'),
+            data={
+                'voice_designs': result.get('voice_designs', []),
+                'character_name': result.get('character_name')
+            }
         ).dict())
 
     except Exception as e:
@@ -211,6 +220,63 @@ def test_voice(project_id):
             message='Voice test started (feature not fully implemented yet)',
             data={'voice_name': voice_name, 'text_length': len(text)}
         ).dict())
+
+    except Exception as e:
+        return jsonify(ErrorResponse(
+            error=str(e),
+            error_type=e.__class__.__name__
+        ).dict()), 500
+
+
+@voice_bp.route('/reference-audio/<voice_name>', methods=['GET'])
+def get_reference_audio(project_id, voice_name):
+    """获取参考音频文件"""
+    try:
+        adapter = ProjectAdapter(project_id)
+        project_info = adapter.get_project_info()
+
+        if not project_info.get('exists'):
+            return jsonify(ErrorResponse(
+                error=f'Project {project_id} not found'
+            ).dict()), 404
+
+        # Get voice designs to check if reference audio exists
+        designs = adapter.get_voice_designs()
+        design = next((d for d in designs if d['name'] == voice_name), None)
+
+        if not design:
+            return jsonify(ErrorResponse(
+                error=f'Voice design {voice_name} not found'
+            ).dict()), 404
+
+        if not design.get('has_reference_audio'):
+            return jsonify(ErrorResponse(
+                error=f'Reference audio not generated for voice {voice_name}'
+            ).dict()), 404
+        
+        # Construct the audio file path
+        # The reference audio is stored in voice_lib_folder_path/{voice_name}.wav
+        # We need to get the voice_lib_folder_path from the project
+        if not adapter.project or not adapter.project.voice_manager:
+            return jsonify(ErrorResponse(
+                error='Voice manager not available'
+            ).dict()), 500
+
+        voice_lib_folder_path = adapter.project.voice_manager.voice_lib_folder_path
+        audio_file_path = os.path.join(voice_lib_folder_path, f"{voice_name}.wav")
+
+        if not os.path.exists(audio_file_path):
+            return jsonify(ErrorResponse(
+                error=f'Reference audio file not found for voice {voice_name}'
+            ).dict()), 404
+
+        # Send the audio file
+        return send_file(
+            os.path.abspath(audio_file_path),
+            as_attachment=False,
+            download_name=f'{voice_name}_reference_audio.wav',
+            mimetype='audio/wav'
+        )
 
     except Exception as e:
         return jsonify(ErrorResponse(

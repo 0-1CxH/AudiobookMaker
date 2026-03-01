@@ -27,7 +27,8 @@ def get_dialogues(project_id):
         segments = adapter.get_text_segments()
 
         # 统计信息
-        total_quotes = sum(1 for s in segments if s['tag'] == 'QUOTE')
+        # 需要分配的segment是非DEFAULT且非PLACEHOLDER的segment
+        total_quotes = sum(1 for s in segments if s['tag'] != 'DEFAULT' and s['tag'] != 'PLACEHOLDER')
         allocated_quotes = sum(1 for s in segments if s['allocated_speaker'])
         unallocated_quotes = total_quotes - allocated_quotes
 
@@ -122,11 +123,11 @@ def update_dialogue(project_id, segment_index):
                 error=f'Segment index {segment_index} out of range'
             ).dict()), 404
 
-        # 检查是否为引语
+        # 检查是否为可分配的segment（非DEFAULT且非PLACEHOLDER）
         segment = segments[segment_index]
-        if segment['tag'] != 'QUOTE':
+        if segment['tag'] == 'DEFAULT' or segment['tag'] == 'PLACEHOLDER':
             return jsonify(ErrorResponse(
-                error=f'Segment {segment_index} is not a quote (tag: {segment["tag"]})'
+                error=f'Segment {segment_index} is not assignable (tag: {segment["tag"]})'
             ).dict()), 400
 
         # 检查角色是否存在
