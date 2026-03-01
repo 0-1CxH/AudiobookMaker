@@ -332,8 +332,8 @@ class Project:
 
                 # 检查人物是否需要TTS，如果不需要则跳过
                 if not character.requires_tts:
-                    print(f"信息：人物 '{character_name}' 不需要TTS，跳过生成")
-                    continue # 不写入，标记未处理
+                    print(f"信息：人物 '{character_name}' 人物不需要音色设计，使用默认voice")
+                    character = default_character
 
                 # 获取人物的voice_name
                 voice_name = character.voice_name
