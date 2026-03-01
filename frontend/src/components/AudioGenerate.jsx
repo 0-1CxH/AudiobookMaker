@@ -9,6 +9,7 @@ import {
     getOutputStatus,
     getDownloadUrl,
     getSegmentAudioUrl,
+    cancelAudioGeneration,
 } from '../api.js'
 import { useToast } from '../App.jsx'
 
@@ -284,6 +285,13 @@ export default function AudioGenerate({ projectId }) {
                     setGenerating(false)
                     addToast('音频生成失败: ' + (res.data?.message || '未知错误'), 'error')
                     fetchData()
+                } else if (status === 'cancelled') {
+                    clearInterval(pollRef.current)
+                    pollRef.current = null
+                    setTaskId(null)
+                    setGenerating(false)
+                    addToast('音频生成已取消', 'info')
+                    fetchData()
                 } else {
                     // Update progress with real-time data
                     const total = res.data?.progress?.total_count || 0
@@ -332,6 +340,34 @@ export default function AudioGenerate({ projectId }) {
         } catch (err) {
             setGenerating(false)
             addToast('音频生成失败: ' + err.message, 'error')
+        }
+    }
+
+    const handleCancel = async () => {
+        try {
+            if (!taskId) {
+                addToast('没有正在运行的任务可取消', 'warning')
+                return
+            }
+
+            addToast('正在取消音频生成...', 'info')
+            await cancelAudioGeneration(projectId, taskId)
+
+            // 清除轮询
+            if (pollRef.current) {
+                clearInterval(pollRef.current)
+                pollRef.current = null
+            }
+
+            // 重置状态
+            setTaskId(null)
+            setGenerating(false)
+            addToast('音频生成已取消', 'success')
+
+            // 刷新数据以显示当前状态
+            fetchData()
+        } catch (err) {
+            addToast('取消失败: ' + err.message, 'error')
         }
     }
 
@@ -392,6 +428,15 @@ export default function AudioGenerate({ projectId }) {
                     >
                         {generating ? '🔄 生成中...' : '🔊 AI音频生成'}
                     </button>
+                    {generating && (
+                        <button
+                            className="btn btn-warning"
+                            onClick={handleCancel}
+                            disabled={!taskId}
+                        >
+                            ⏹️ 停止生成
+                        </button>
+                    )}
                     <button
                         className="btn btn-success"
                         onClick={handleRender}

@@ -178,6 +178,13 @@ export async function getAudioProgress(projectId) {
     return request(`/projects/${projectId}/audio/progress`);
 }
 
+export async function cancelAudioGeneration(projectId, taskId) {
+    return request(`/projects/${projectId}/audio/cancel/${taskId}`, {
+        method: 'POST',
+        body: {},
+    });
+}
+
 // ===== Output =====
 export async function renderAudio(projectId) {
     return request(`/projects/${projectId}/output/render`, {

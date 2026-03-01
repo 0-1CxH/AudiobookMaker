@@ -67,6 +67,13 @@ def generate_audio(project_id):
 
                 # 逐个生成未生成的片段
                 for i, seg_index in enumerate(tqdm(not_generated, desc='Generating audio segments')):
+                    # 检查任务是否被取消
+                    if task_status_store.get(task_id, {}).get('status') == 'cancelled':
+                        task_status_store[task_id]['message'] = 'Task cancelled by user'
+                        task_status_store[task_id]['updated_at'] = time.time()
+                        task_status_store[task_id]['completed_at'] = time.time()
+                        return
+
                     # 更新状态
                     task_status_store[task_id]['message'] = f'Generating segment {seg_index} (current task progress: {i+1}/{total})'
                     task_status_store[task_id]['progress'] = adapter.get_percentage_generated()
@@ -318,6 +325,48 @@ def get_generation_progress(project_id):
                 'total_count': total_count,
                 'progress_percentage': (generated_count / total_count * 100) if total_count > 0 else 0
             }
+        ).dict())
+
+    except Exception as e:
+        return jsonify(ErrorResponse(
+            error=str(e),
+            error_type=e.__class__.__name__
+        ).dict()), 500
+
+
+@audio_bp.route('/cancel/<task_id>', methods=['POST'])
+def cancel_generation(project_id, task_id):
+    """取消音频生成任务"""
+    try:
+        if task_id not in task_status_store:
+            return jsonify(ErrorResponse(
+                error=f'Task {task_id} not found'
+            ).dict()), 404
+
+        task_status = task_status_store[task_id]
+
+        # 验证任务属于当前项目
+        if task_status.get('project_id') != project_id:
+            return jsonify(ErrorResponse(
+                error=f'Task {task_id} does not belong to project {project_id}'
+            ).dict()), 403
+
+        # 只有运行中或等待中的任务可以取消
+        if task_status['status'] not in ['pending', 'running']:
+            return jsonify(ErrorResponse(
+                error=f'Task {task_id} cannot be cancelled (current status: {task_status["status"]})'
+            ).dict()), 400
+
+        # 更新任务状态为取消
+        task_status_store[task_id]['status'] = 'cancelled'
+        task_status_store[task_id]['message'] = 'Task cancelled by user'
+        task_status_store[task_id]['updated_at'] = time.time()
+        task_status_store[task_id]['completed_at'] = time.time()
+
+        return jsonify(StandardResponse(
+            success=True,
+            message=f'Task {task_id} cancelled successfully',
+            data={'task_id': task_id, 'status': 'cancelled'}
         ).dict())
 
     except Exception as e:
