@@ -206,6 +206,15 @@ export default function AudioGenerate({ projectId }) {
         }
     }, [projectId])
 
+    const refreshSegments = useCallback(async () => {
+        try {
+            const segRes = await getAudioSegments(projectId)
+            setSegments(segRes.data?.segments || [])
+        } catch (err) {
+            console.error('Failed to refresh segments:', err)
+        }
+    }, [projectId])
+
     const handlePlaySegmentAudio = (segmentIndex) => {
         try {
             if (playingSegment === segmentIndex) {
@@ -292,17 +301,20 @@ export default function AudioGenerate({ projectId }) {
 
                     // Log progress for debugging
                     console.log(`Audio generation progress: ${processed}/${total} (${progressPct}%) - ${message || ''}`)
+
+                    // Refresh segments list to show updated status
+                    refreshSegments()
                 }
             } catch (err) {
                 console.error('Error polling audio status:', err)
                 // Don't stop polling on occasional errors, but log them
             }
-        }, 1000)
+        }, 5000)
 
         return () => {
             if (pollRef.current) clearInterval(pollRef.current)
         }
-    }, [taskId, projectId])
+    }, [taskId, projectId, refreshSegments])
 
     const handleGenerate = async () => {
         try {
