@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify, send_file
 import os
 import sys
 import time
+from tqdm import tqdm
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '..', 'src'))
@@ -48,19 +49,55 @@ def generate_audio(project_id):
                 task_status_store[task_id]['message'] = 'Starting audio generation'
                 task_status_store[task_id]['updated_at'] = time.time()
 
-                # 执行音频生成
+                # 获取未生成的片段列表
                 result = adapter.generate_audio()
-
-                if result.get('success'):
-                    task_status_store[task_id]['status'] = 'completed'
-                    task_status_store[task_id]['progress'] = 100
-                    task_status_store[task_id]['message'] = f'Generated {result.get("generated_count", 0)} audio segments'
-                    task_status_store[task_id]['result'] = result
-                else:
+                if not result.get('success'):
                     task_status_store[task_id]['status'] = 'failed'
-                    task_status_store[task_id]['message'] = result.get('error', 'Audio generation failed')
+                    task_status_store[task_id]['message'] = result.get('error', 'Failed to get segment list')
                     task_status_store[task_id]['error'] = result.get('error')
+                    task_status_store[task_id]['updated_at'] = time.time()
+                    task_status_store[task_id]['completed_at'] = time.time()
+                    return
 
+                not_generated = result.get('not_generated', [])
+                total = len(not_generated)
+                task_status_store[task_id]['total_segments'] = total
+                task_status_store[task_id]['processed_segments'] = 0
+                task_status_store[task_id]['failed_segments'] = []
+
+                # 逐个生成未生成的片段
+                for i, seg_index in enumerate(tqdm(not_generated, desc='Generating audio segments')):
+                    # 更新状态
+                    task_status_store[task_id]['message'] = f'Generating segment {seg_index} ({i+1}/{total})'
+                    task_status_store[task_id]['progress'] = int((i / total) * 100) if total > 0 else 0
+                    task_status_store[task_id]['current_segment'] = seg_index
+                    task_status_store[task_id]['updated_at'] = time.time()
+
+                    # 调用 regenerate_segment
+                    seg_result = adapter.regenerate_segment(seg_index)
+                    if not seg_result.get('success'):
+                        # 记录失败，但继续生成其他片段
+                        task_status_store[task_id]['failed_segments'].append({
+                            'index': seg_index,
+                            'error': seg_result.get('error')
+                        })
+                    else:
+                        task_status_store[task_id]['processed_segments'] += 1
+
+                    # 更新进度
+                    task_status_store[task_id]['progress'] = int(((i + 1) / total) * 100) if total > 0 else 100
+                    task_status_store[task_id]['updated_at'] = time.time()
+
+                # 所有片段处理完成
+                failed_count = len(task_status_store[task_id]['failed_segments'])
+                if failed_count == 0:
+                    task_status_store[task_id]['status'] = 'completed'
+                    task_status_store[task_id]['message'] = f'Successfully generated {total} audio segments'
+                else:
+                    task_status_store[task_id]['status'] = 'completed'
+                    task_status_store[task_id]['message'] = f'Generated {total - failed_count} segments, {failed_count} failed'
+
+                task_status_store[task_id]['progress'] = 100
                 task_status_store[task_id]['updated_at'] = time.time()
                 task_status_store[task_id]['completed_at'] = time.time()
 

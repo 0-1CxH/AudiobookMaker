@@ -355,15 +355,11 @@ class ProjectAdapter:
             return {'success': False, 'error': str(e)}
 
     def generate_audio(self) -> Dict[str, Any]:
-        """生成音频"""
+        """获取未生成的音频片段列表，但不实际生成"""
         if not self.project:
             return {'success': False, 'error': 'Project not loaded'}
 
         try:
-            # 开始生成音频
-            self.project.generate_text_to_audio_segment()
-            self.project.save()
-
             # 检查生成状态
             not_generated = self.project.not_yet_generated_segments()
             generated_count = len(self.project.text_manager.data) - len(not_generated)
@@ -376,7 +372,6 @@ class ProjectAdapter:
                 'segments': self.get_text_segments()
             }
         except Exception as e:
-            self.project.save()
             return {'success': False, 'error': str(e)}
 
     def regenerate_segment(self, segment_index: int) -> Dict[str, Any]:

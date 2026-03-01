@@ -2,7 +2,6 @@ import os
 import json
 import concurrent.futures
 from dataclasses import dataclass, asdict
-from tqdm import tqdm
 from .character import CharacterManager, Character
 from .text import TextManager, TaggedTextSegment
 from .voice import VoiceManager, VoiceDesign
@@ -306,7 +305,7 @@ class Project:
             if not isinstance(indices_to_process, list):
                 indices_to_process = [indices_to_process]
 
-        for i in tqdm(indices_to_process, desc="生成音频片段"):
+        for i in indices_to_process:
             # 检查索引是否在有效范围内
             if i < 0 or i >= len(self.text_manager.data):
                 print(f"警告：片段索引 {i} 超出范围，跳过")

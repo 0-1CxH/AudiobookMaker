@@ -365,7 +365,7 @@ export default function AudioGenerate({ projectId }) {
                         onClick={handleGenerate}
                         disabled={generating}
                     >
-                        {generating ? '🔄 生成中...' : '🤖 AI音频生成'}
+                        {generating ? '🔄 生成中...' : '🔊 AI音频生成'}
                     </button>
                     <button
                         className="btn btn-success"
